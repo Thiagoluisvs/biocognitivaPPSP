@@ -8,7 +8,6 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/biocognitiva.css') }}">
     <script>
-        // Theme initialization
         document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -18,9 +17,10 @@
             updateThemeIcon();
         }
         function updateThemeIcon() {
-            const toggle = document.querySelector('.theme-toggle i');
-            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            if (toggle) toggle.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            document.querySelectorAll('.theme-toggle i').forEach(toggle => {
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                toggle.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            });
         }
         window.addEventListener('load', updateThemeIcon);
     </script>
@@ -51,6 +51,7 @@
         {% endif %}
         {% if session.get('role') in ('supervisor','adm_biocognitiva','administrador') %}
         <li><a href="{{ url_for('treinamentos') }}" class="{% if request.endpoint=='treinamentos' %}active{% endif %}"><i class="fas fa-chalkboard-teacher"></i><span>Treinamentos</span></a></li>
+        <li><a href="{{ url_for('subcontratadas') }}" class="{% if request.endpoint=='subcontratadas' %}active{% endif %}"><i class="fas fa-sitemap"></i><span>Subcontratadas</span></a></li>
         {% endif %}
         {% if session.get('role') != 'colaborador' %}
         <li><a href="{{ url_for('resultados') }}" class="{% if request.endpoint=='resultados' %}active{% endif %}"><i class="fas fa-flask"></i><span>Resultados</span></a></li>
@@ -62,9 +63,11 @@
         {% endif %}
         {% if session.get('role') in ('tecnico','adm_biocognitiva','administrador') %}
         <li><a href="{{ url_for('faltas') }}" class="{% if request.endpoint=='faltas' %}active{% endif %}"><i class="fas fa-user-times"></i><span>Faltas</span></a></li>
-        <li><a href="{{ url_for('controle_positivo') }}" class="{% if request.endpoint=='controle_positivo' %}active{% endif %}"><i class="fas fa-exclamation-triangle"></i><span>Controle Positivo</span></a></li>
+        <li><a href="{{ url_for('controle_positivo') }}" class="{% if request.endpoint=='controle_positivo' %}active{% endif %}"><i class="fas fa-ban"></i><span>Eventos impeditivos</span></a></li>
         {% endif %}
         {% if session.get('role') in ('adm_biocognitiva','administrador') %}
+        <li><a href="{{ url_for('clientes') }}" class="{% if request.endpoint=='clientes' %}active{% endif %}"><i class="fas fa-handshake"></i><span>Cadastro de clientes</span></a></li>
+        <li><a href="{{ url_for('estoque_kits') }}" class="{% if request.endpoint=='estoque_kits' %}active{% endif %}"><i class="fas fa-boxes"></i><span>Estoque de kits</span></a></li>
         <li><a href="{{ url_for('financeiro') }}" class="{% if request.endpoint=='financeiro' %}active{% endif %}"><i class="fas fa-dollar-sign"></i><span>Financeiro</span></a></li>
         {% endif %}
         {% if session.get('role') == 'administrador' %}
@@ -79,13 +82,13 @@
         <button class="mobile-toggle" type="button" title="Abrir menu" aria-label="Abrir menu" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')"><i class="fas fa-bars"></i></button>
         <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
         <div class="topbar-actions">
-            <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
+            <button type="button" class="theme-toggle" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema claro ou escuro">
                 <i class="fas fa-moon"></i>
             </button>
             <span class="badge badge-{{ session.get('role') }}">{{ session.get('role','').replace('_',' ').title() }}</span>
         </div>
     </header>
-    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">{% for c,m in messages %}<div class="flash flash-{{ c }}"><i class="fas fa-{% if c=='success' %}check-circle{% elif c=='error' %}exclamation-circle{% elif c=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>{{ m }}<button class="flash-close" onclick="this.parentElement.remove()">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">{% for c,m in messages %}<div class="flash flash-{{ c }}"><i class="fas fa-{% if c=='success' %}check-circle{% elif c=='error' %}exclamation-circle{% elif c=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>{{ m }}<button type="button" class="flash-close" onclick="this.parentElement.remove()">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}
     <div class="content-area">{% block content %}{% endblock %}</div>
 </main>
 {% else %}{% block auth_content %}{% endblock %}{% endif %}
