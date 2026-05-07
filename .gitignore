@@ -1,0 +1,17 @@
+*.db
+*.sqlite
+*.sqlite3
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+.DS_Store
+AULA ONLINE/
+__MACOSX/
+AULA ONLINE.zip
+.idea/
+.vscode/
+*.log
