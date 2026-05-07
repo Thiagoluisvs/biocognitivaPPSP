@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block page_title %}Vídeo Aulas{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-video"></i> Aulas em Vídeo</h2></div>
+<div class="grid-2">
+{% for v in videos %}
+<div class="card"><div class="card-header"><h2>{{ v.ordem }}. {{ v.titulo }}</h2></div>
+<div class="card-body">
+    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; margin-bottom: 1rem;">
+        <iframe src="{{ v.video_url }}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen></iframe>
+    </div>
+    <p>{{ v.descricao }}</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; color:var(--text-secondary);">
+        <span><i class="fas fa-clock"></i> {{ v.duracao_minutos }} minutos</span>
+    </div>
+</div></div>
+{% endfor %}
+</div>
+{% endblock %}

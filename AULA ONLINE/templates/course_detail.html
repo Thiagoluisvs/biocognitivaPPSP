@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block page_title %}{{ course.title }}{% endblock %}
+{% block content %}
+<div class="course-hero">
+    <div class="course-hero-info">
+        <span class="badge badge-{{ course.difficulty }}">{{ course.difficulty.title() }}</span>
+        <h2>{{ course.title }}</h2>
+        <p>{{ course.description }}</p>
+        <div class="course-meta">
+            <span><i class="fas fa-user-tie"></i> {{ course.instructor_name }}</span>
+            <span><i class="fas fa-clock"></i> {{ course.duration_hours }}h</span>
+        </div>
+        {% if user.role == 'aluno' and not enrollment %}
+        <form method="POST" action="{{ url_for('enroll', course_id=course.id) }}">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-user-plus"></i> Matricular-se</button>
+        </form>
+        {% elif enrollment %}
+        <div class="enrollment-status">
+            <span class="badge badge-success"><i class="fas fa-check"></i> Matriculado</span>
+            <div class="progress-bar"><div class="progress-fill" style="width:{{ enrollment.progress }}%"></div></div>
+            <span>{{ enrollment.progress|round(1) }}% concluído</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-play-circle"></i> Aulas</h2></div>
+        <div class="card-body">
+            {% for l in lessons %}
+            <div class="lesson-item">
+                <div class="lesson-num">{{ l.order_index }}</div>
+                <div class="lesson-info">
+                    <h4>{{ l.title }}</h4>
+                    <small><i class="fas fa-clock"></i> {{ l.duration_minutes }} min</small>
+                </div>
+                <a href="{{ url_for('lesson_view', lesson_id=l.id) }}" class="btn btn-sm btn-outline"><i class="fas fa-play"></i></a>
+            </div>
+            {% endfor %}
+            {% if not lessons %}<p class="empty-state">Nenhuma aula disponível ainda.</p>{% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h2><i class="fas fa-clipboard-check"></i> Provas</h2>
+            {% if user.role in ('instrutor', 'admin') %}
+            <a href="{{ url_for('quiz_create', course_id=course.id) }}" class="btn btn-sm btn-primary"><i class="fas fa-plus"></i></a>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% for q in quizzes %}
+            <div class="quiz-item">
+                <div class="quiz-info">
+                    <h4>{{ q.title }}</h4>
+                    <small>Nota mín: {{ q.min_passing_grade }} | Máx: {{ q.max_grade }} | {{ q.max_attempts }} tentativas | {{ q.time_limit_minutes }} min</small>
+                </div>
+                <a href="{{ url_for('quiz_view', quiz_id=q.id) }}" class="btn btn-sm btn-primary">Acessar</a>
+            </div>
+            {% endfor %}
+            {% if not quizzes %}<p class="empty-state">Nenhuma prova disponível.</p>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

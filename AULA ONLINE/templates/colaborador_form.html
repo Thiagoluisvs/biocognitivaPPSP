@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block page_title %}Novo Colaborador{% endblock %}
+{% block content %}
+<div class="card"><div class="card-header"><h2><i class="fas fa-user-plus"></i> Cadastrar Colaborador ARSO</h2></div><div class="card-body">
+<form method="POST">
+    <div class="grid-2">
+        <div class="form-group"><label>Nome Completo *</label><input type="text" name="name" class="form-input" required></div>
+        <div class="form-group"><label>CPF *</label><input type="text" name="cpf" class="form-input" placeholder="000.000.000-00" required></div>
+    </div>
+    <div class="form-group"><label>Endereço</label><input type="text" name="endereco" class="form-input"></div>
+    <div class="grid-3">
+        <div class="form-group"><label>Função</label><input type="text" name="funcao" class="form-input" value="ARSO"></div>
+        <div class="form-group"><label>Data Admissão</label><input type="date" name="data_admissao" class="form-input"></div>
+        <div class="form-group"><label>Empresa</label><input type="text" name="empresa" class="form-input" value="NOVAVIA"></div>
+    </div>
+    <div class="grid-2">
+        <div class="form-group"><label>Telefone</label><input type="text" name="telefone" class="form-input"></div>
+        <div class="form-group"><label>Email</label><input type="email" name="email" class="form-input"></div>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Cadastrar</button>
+</form></div></div>
+{% endblock %}

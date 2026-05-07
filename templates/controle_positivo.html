@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block page_title %}Controle Positivo{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-exclamation-triangle"></i> Controle de Amostras Positivas</h2></div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar Controle Positivo</h2></div><div class="card-body">
+<form method="POST" action="{{ url_for('controle_positivo_novo') }}" enctype="multipart/form-data">
+    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Info da Amostra (Lote/Código)</label><input type="text" name="info_amostra" class="form-input"></div>
+    <div class="form-group"><label>Remessa por Correio (Rastreio)</label><input type="text" name="remessa_correio" class="form-input"></div>
+    <div class="form-group"><label>Arquivo Resultado (Análise)</label><input type="file" name="arquivo" class="form-input"></div>
+    <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input"></div>
+    <button type="submit" class="btn btn-warning"><i class="fas fa-exclamation-triangle"></i> Registrar Controle</button>
+</form></div></div>
+
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Registros de Positivos</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Colaborador</th><th>Amostra</th><th>Rastreio</th></tr></thead><tbody>
+{% for c in controles %}<tr><td>{{ c.created_at[:10] }}</td><td>{{ c.colab_name }}</td><td>{{ c.info_amostra }}</td><td>{{ c.remessa_correio }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

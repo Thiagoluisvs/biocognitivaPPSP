@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block page_title %}Sorteio Aleatório{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-random"></i> Sorteio Aleatório</h2></div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-dice"></i> Realizar Novo Sorteio</h2></div><div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Nome / Motivo do Sorteio *</label><input type="text" name="titulo" class="form-input" value="Sorteio Aleatório Periódico" required></div>
+    <div class="form-group"><label>Quantidade de Colaboradores a Sortear *</label><input type="number" name="quantidade" class="form-input" value="1" min="1" required></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-random"></i> Sortear Agora</button>
+</form></div></div>
+
+<div class="card"><div class="card-header"><h2><i class="fas fa-history"></i> Histórico de Sorteios</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Motivo</th><th>Qtd</th><th>Sorteados</th></tr></thead><tbody>
+{% for s in sorteios %}<tr><td>{{ s.created_at[:10] }}</td><td>{{ s.titulo }}</td><td>{{ s.quantidade }}</td><td>
+    {% set cols = modules.json.loads(s.colaboradores_sorteados) if s.colaboradores_sorteados else [] %}
+    {% for c in cols %}<span class="badge badge-warning">{{ c.name }}</span> {% endfor %}
+</td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

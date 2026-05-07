@@ -451,4 +451,4 @@ def settings():
     return render_template('settings.html', user=u, settings=s)
 
 if __name__=='__main__':
-    init_db(); seed_demo_data(); app.run(debug=True, host='0.0.0.0', port=5000)
+    init_db(); seed_demo_data(); app.run(debug=True,port=5000)

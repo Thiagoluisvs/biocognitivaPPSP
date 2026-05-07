@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block page_title %}Uploads{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-cloud-upload-alt"></i> Uploads e Materiais</h2></div>
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-upload"></i> Enviar Arquivo</h2></div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="upload-form">
+                <div class="form-group">
+                    <label>Arquivo</label>
+                    <div class="file-drop" id="fileDrop">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Arraste ou clique para selecionar</p>
+                        <input type="file" name="file" id="fileInput" required>
+                        <small>PDF, DOC, XLS, PPT, JPG, PNG, MP4, ZIP (máx 50MB)</small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Categoria</label>
+                    <select name="category" class="form-select">
+                        <option value="documento">Documento</option>
+                        {% if user.role in ('instrutor','admin') %}<option value="material">Material de Estudo</option>{% endif %}
+                        <option value="certificado">Certificado</option>
+                        <option value="relatorio">Relatório</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Descrição</label>
+                    <input type="text" name="description" class="form-input" placeholder="Descrição do arquivo">
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar</button>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-folder-open"></i> Meus Arquivos</h2></div>
+        <div class="card-body">
+            {% for f in files %}
+            <div class="file-item">
+                <i class="fas fa-file-{{ 'pdf' if 'pdf' in f.original_filename else 'alt' }}"></i>
+                <div class="file-info"><strong>{{ f.original_filename }}</strong><br><small>{{ f.category.title() }} • {{ (f.file_size / 1024)|round(1) }} KB</small></div>
+            </div>
+            {% endfor %}
+            {% if not files %}<p class="empty-state"><i class="fas fa-inbox"></i> Nenhum arquivo enviado.</p>{% endif %}
+        </div>
+    </div>
+</div>
+{% if materials %}
+<div class="card mt-2">
+    <div class="card-header"><h2><i class="fas fa-book-reader"></i> Materiais de Estudo</h2></div>
+    <div class="card-body">
+        {% for m in materials %}
+        <div class="file-item"><i class="fas fa-file-download"></i><div class="file-info"><strong>{{ m.original_filename }}</strong><br><small>{{ m.description }}</small></div></div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

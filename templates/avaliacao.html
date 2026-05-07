@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block page_title %}Avaliação: {{ avaliacao.titulo }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-secondary mb-1"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2>{{ avaliacao.titulo }}</h2>
+</div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-clipboard-check"></i> Prova / Avaliação</h2></div><div class="card-body">
+    {% if not colab %}
+    <div class="alert alert-warning">Seu usuário não está vinculado a um Colaborador. Entre em contato com o supervisor.</div>
+    {% elif not can_attempt %}
+    <div class="alert alert-info">Você já completou esta avaliação ou atingiu o limite máximo de tentativas ({{ avaliacao.max_tentativas }}).</div>
+    {% else %}
+    <p class="mb-2">Responda todas as questões com atenção. Nota mínima para aprovação: <strong>{{ avaliacao.nota_minima }}</strong></p>
+    <form method="POST" action="{{ url_for('avaliacao_submit', av_id=avaliacao.id) }}">
+        {% for q in questoes %}
+        <div class="quiz-question" style="margin-bottom:2rem; padding:1.5rem; background:var(--bg-lighter); border-radius:8px;">
+            <h4>{{ loop.index }}. {{ q.pergunta }}</h4>
+            <div class="options" style="margin-top:1rem; display:flex; flex-direction:column; gap:0.5rem;">
+                {% for opt in q.opcoes %}
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;"><input type="radio" name="q_{{ q.id }}" value="{{ opt }}" required> {{ opt }}</label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary btn-full mt-2" onclick="return confirm('Deseja finalizar e enviar a avaliação?')"><i class="fas fa-paper-plane"></i> Finalizar e Enviar</button>
+    </form>
+    {% endif %}
+</div></div>
+
+<div class="card"><div class="card-header"><h2><i class="fas fa-history"></i> Suas Tentativas</h2></div><div class="card-body">
+    {% if tentativas %}
+    <table class="table"><thead><tr><th>Tentativa</th><th>Data</th><th>Nota</th><th>Status</th></tr></thead><tbody>
+        {% for t in tentativas %}
+        <tr><td>{{ t.tentativa_num }}</td><td>{{ t.completed_at[:16] }}</td><td><strong>{{ t.nota }}/{{ t.nota_maxima }}</strong></td><td><span class="badge {% if t.aprovado %}badge-success{% else %}badge-danger{% endif %}">{% if t.aprovado %}Aprovado{% else %}Reprovado{% endif %}</span></td></tr>
+        {% endfor %}
+    </tbody></table>
+    {% else %}
+    <p class="empty-state">Nenhuma tentativa realizada ainda.</p>
+    {% endif %}
+</div></div>
+</div>
+{% endblock %}

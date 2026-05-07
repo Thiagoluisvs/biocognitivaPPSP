@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block page_title %}Serviços e Requerimentos{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-concierge-bell"></i> Agendar Serviços / Requerimentos</h2></div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Nova Solicitação</h2></div><div class="card-body">
+<form method="POST" action="{{ url_for('servico_novo') }}" enctype="multipart/form-data">
+    <div class="form-group"><label>Tipo de Serviço *</label><select name="tipo" class="form-select" required>
+        <option value="coleta_in_company">Coleta In Company</option><option value="treinamento_in_company">Treinamento In Company</option>
+        <option value="relatorio_especifico">Relatório Específico (Auditoria)</option><option value="outro">Outro / Notificação</option>
+    </select></div>
+    <div class="form-group"><label>Título / Assunto *</label><input type="text" name="titulo" class="form-input" required></div>
+    <div class="form-group"><label>Descrição / Detalhes</label><textarea name="descricao" class="form-input" rows="3"></textarea></div>
+    <div class="form-group"><label>Anexar Documento (Opcional)</label><input type="file" name="documento" class="form-input"></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Enviar Solicitação</button>
+</form></div></div>
+
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Solicitações Realizadas</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Solicitante</th><th>Tipo</th><th>Assunto</th><th>Status</th></tr></thead><tbody>
+{% for s in servicos %}<tr><td>{{ s.created_at[:10] }}</td><td>{{ s.solicitante }}</td><td><span class="badge badge-info">{{ s.tipo.replace('_',' ').title() }}</span></td><td>{{ s.titulo }}</td><td><span class="badge badge-{{ s.status }}">{{ s.status.title() }}</span></td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

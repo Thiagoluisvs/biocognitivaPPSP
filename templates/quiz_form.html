@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block page_title %}Criar Prova{% endblock %}
+{% block content %}
+<a href="{{ url_for('course_detail', course_id=course.id) }}" class="btn btn-outline btn-sm mb-1"><i class="fas fa-arrow-left"></i> Voltar</a>
+<div class="card"><div class="card-header"><h2><i class="fas fa-clipboard-check"></i> Nova Prova - {{ course.title }}</h2></div>
+<div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Título da Prova</label><input type="text" name="title" class="form-input" required></div>
+    <div class="form-group"><label>Descrição</label><textarea name="description" class="form-textarea" rows="3"></textarea></div>
+    <div class="grid-2">
+        <div class="form-group"><label>Nota Mínima para Aprovação</label><input type="number" name="min_passing_grade" class="form-input" value="7.0" step="0.1" min="0" max="10"></div>
+        <div class="form-group"><label>Nota Máxima</label><input type="number" name="max_grade" class="form-input" value="10.0" step="0.1"></div>
+    </div>
+    <div class="grid-2">
+        <div class="form-group"><label>Máx. Tentativas</label><input type="number" name="max_attempts" class="form-input" value="2" min="1" max="10"></div>
+        <div class="form-group"><label>Tempo Limite (min)</label><input type="number" name="time_limit_minutes" class="form-input" value="60" min="5"></div>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Criar Prova</button>
+</form></div></div>
+{% endblock %}

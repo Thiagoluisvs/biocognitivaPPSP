@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block page_title %}Módulo Financeiro{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-dollar-sign"></i> Financeiro</h2></div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar Arquivo Financeiro</h2></div><div class="card-body">
+<form method="POST" action="{{ url_for('financeiro_upload') }}" enctype="multipart/form-data">
+    <div class="form-group"><label>Tipo de Documento *</label><select name="tipo" class="form-select" required>
+        <option value="boleto">Boleto Mensal</option><option value="nota_fiscal">Nota Fiscal de Serviços</option>
+        <option value="tabela_precos">Tabela de Preços</option><option value="outro">Outro</option>
+    </select></div>
+    <div class="form-group"><label>Título / Mês Referência *</label><input type="text" name="titulo" class="form-input" placeholder="Ex: Boleto Janeiro 2026" required></div>
+    <div class="form-group"><label>Arquivo *</label><input type="file" name="file" class="form-input" required></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar Documento</button>
+</form></div></div>
+
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Arquivos Financeiros</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Título</th><th>Arquivo</th></tr></thead><tbody>
+{% for d in docs %}<tr><td>{{ d.created_at[:10] }}</td><td><span class="badge badge-success">{{ d.tipo.replace('_',' ').title() }}</span></td><td>{{ d.titulo }}</td><td><span class="badge badge-info"><i class="fas fa-file"></i> {{ d.original_filename }}</span></td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block page_title %}{{ quiz.title }}{% endblock %}
+{% block content %}
+<a href="{{ url_for('course_detail', course_id=course.id) }}" class="btn btn-outline btn-sm mb-1"><i class="fas fa-arrow-left"></i> Voltar</a>
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-clipboard-check"></i> {{ quiz.title }}</h2>
+        <div class="quiz-config">
+            <span class="badge badge-info">Nota mín: {{ quiz.min_passing_grade }}</span>
+            <span class="badge badge-info">Nota máx: {{ quiz.max_grade }}</span>
+            <span class="badge badge-info">{{ quiz.max_attempts }} tentativas</span>
+            <span class="badge badge-info"><i class="fas fa-clock"></i> {{ quiz.time_limit_minutes }} min</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <p>{{ quiz.description }}</p>
+        {% if attempts %}
+        <div class="attempts-history">
+            <h3>Histórico de Tentativas</h3>
+            {% for a in attempts %}
+            <div class="attempt-row {% if a.passed %}attempt-pass{% else %}attempt-fail{% endif %}">
+                <span><strong>Tentativa {{ a.attempt_number }}</strong></span>
+                <span class="attempt-grade">Nota: {{ a.grade }}/{{ quiz.max_grade }}</span>
+                <span class="badge {% if a.passed %}badge-success{% else %}badge-danger{% endif %}">{% if a.passed %}Aprovado{% else %}Reprovado{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if can_attempt %}
+        <form method="POST" action="{{ url_for('quiz_submit', quiz_id=quiz.id) }}" class="quiz-form" id="quizForm">
+            <h3>Questões</h3>
+            {% for q in questions %}
+            <div class="question-block">
+                <div class="question-header">
+                    <span class="question-num">{{ loop.index }}</span>
+                    <p class="question-text">{{ q.question_text }}</p>
+                    <span class="question-points">{{ q.points }} pts</span>
+                </div>
+                {% if q.question_type in ('multiple_choice', 'true_false') %}
+                <div class="options-list">
+                    {% for opt in q.options %}
+                    <label class="option-label">
+                        <input type="radio" name="question_{{ q.id }}" value="{{ opt }}" required>
+                        <span class="option-text">{{ opt }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% elif q.question_type == 'fill_blank' %}
+                <input type="text" name="question_{{ q.id }}" class="form-input" placeholder="Sua resposta..." required>
+                {% elif q.question_type == 'essay' %}
+                <textarea name="question_{{ q.id }}" class="form-textarea" rows="4" placeholder="Escreva sua resposta..." required></textarea>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-paper-plane"></i> Enviar Prova</button>
+        </form>
+        {% else %}
+        <div class="quiz-locked">
+            <i class="fas fa-lock"></i>
+            <p>{% if attempts and attempts[-1].passed %}Você já foi aprovado nesta prova!{% else %}Número máximo de tentativas atingido.{% endif %}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

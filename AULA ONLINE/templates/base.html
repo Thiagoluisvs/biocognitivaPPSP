@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BiocognitivaPPSP{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% if session.get('user_id') %}
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="logo"><i class="fas fa-dna"></i><span>Bio<b>PPSP</b></span></div>
+        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('collapsed')"><i class="fas fa-bars"></i></button>
+    </div>
+    <div class="sidebar-user">
+        <div class="avatar">{{ session.get('name','U')[0] }}</div>
+        <div class="user-info"><span class="user-name">{{ session.get('name') }}</span><span class="user-role">{{ session.get('role','').replace('_',' ').title() }}</span></div>
+    </div>
+    <ul class="sidebar-menu">
+        <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i><span>Dashboard</span></a></li>
+        {% if session.get('role') == 'colaborador' %}
+        <li><a href="{{ url_for('video_aulas') }}" class="{% if request.endpoint=='video_aulas' %}active{% endif %}"><i class="fas fa-video"></i><span>Vídeo Aulas</span></a></li>
+        {% endif %}
+        {% if session.get('role') != 'colaborador' %}
+        <li><a href="{{ url_for('institucional') }}" class="{% if request.endpoint=='institucional' %}active{% endif %}"><i class="fas fa-building"></i><span>Institucional</span></a></li>
+        <li><a href="{{ url_for('colaboradores') }}" class="{% if request.endpoint=='colaboradores' %}active{% endif %}"><i class="fas fa-users"></i><span>Colaboradores</span></a></li>
+        <li><a href="{{ url_for('agendamentos') }}" class="{% if request.endpoint=='agendamentos' %}active{% endif %}"><i class="fas fa-calendar-alt"></i><span>Agendamentos</span></a></li>
+        {% endif %}
+        {% if session.get('role') in ('supervisor','adm_biocognitiva','administrador') %}
+        <li><a href="{{ url_for('treinamentos') }}" class="{% if request.endpoint=='treinamentos' %}active{% endif %}"><i class="fas fa-chalkboard-teacher"></i><span>Treinamentos</span></a></li>
+        {% endif %}
+        {% if session.get('role') != 'colaborador' %}
+        <li><a href="{{ url_for('resultados') }}" class="{% if request.endpoint=='resultados' %}active{% endif %}"><i class="fas fa-flask"></i><span>Resultados</span></a></li>
+        <li><a href="{{ url_for('relatorios') }}" class="{% if request.endpoint=='relatorios' %}active{% endif %}"><i class="fas fa-file-alt"></i><span>Relatórios</span></a></li>
+        {% endif %}
+        {% if session.get('role') in ('supervisor','adm_biocognitiva','administrador') %}
+        <li><a href="{{ url_for('servicos') }}" class="{% if request.endpoint=='servicos' %}active{% endif %}"><i class="fas fa-concierge-bell"></i><span>Serviços</span></a></li>
+        <li><a href="{{ url_for('sorteio') }}" class="{% if request.endpoint=='sorteio' %}active{% endif %}"><i class="fas fa-random"></i><span>Sorteio</span></a></li>
+        {% endif %}
+        {% if session.get('role') in ('tecnico','adm_biocognitiva','administrador') %}
+        <li><a href="{{ url_for('faltas') }}" class="{% if request.endpoint=='faltas' %}active{% endif %}"><i class="fas fa-user-times"></i><span>Faltas</span></a></li>
+        <li><a href="{{ url_for('controle_positivo') }}" class="{% if request.endpoint=='controle_positivo' %}active{% endif %}"><i class="fas fa-exclamation-triangle"></i><span>Controle Positivo</span></a></li>
+        {% endif %}
+        {% if session.get('role') in ('adm_biocognitiva','administrador') %}
+        <li><a href="{{ url_for('financeiro') }}" class="{% if request.endpoint=='financeiro' %}active{% endif %}"><i class="fas fa-dollar-sign"></i><span>Financeiro</span></a></li>
+        {% endif %}
+        {% if session.get('role') == 'administrador' %}
+        <li><a href="{{ url_for('admin_users') }}" class="{% if request.endpoint=='admin_users' %}active{% endif %}"><i class="fas fa-users-cog"></i><span>Usuários</span></a></li>
+        <li><a href="{{ url_for('settings') }}" class="{% if request.endpoint=='settings' %}active{% endif %}"><i class="fas fa-cog"></i><span>Configurações</span></a></li>
+        {% endif %}
+    </ul>
+    <div class="sidebar-footer"><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i><span>Sair</span></a></div>
+</nav>
+<main class="main-content">
+    <header class="topbar">
+        <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')"><i class="fas fa-bars"></i></button>
+        <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+        <div class="topbar-actions"><span class="badge badge-{{ session.get('role') }}">{{ session.get('role','').replace('_',' ').title() }}</span></div>
+    </header>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">{% for c,m in messages %}<div class="flash flash-{{ c }}"><i class="fas fa-{% if c=='success' %}check-circle{% elif c=='error' %}exclamation-circle{% elif c=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>{{ m }}<button class="flash-close" onclick="this.parentElement.remove()">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}
+    <div class="content-area">{% block content %}{% endblock %}</div>
+</main>
+{% else %}{% block auth_content %}{% endblock %}{% endif %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

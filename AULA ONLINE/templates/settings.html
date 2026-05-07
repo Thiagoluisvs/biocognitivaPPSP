@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block page_title %}Configurações Globais{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-cog"></i> Configurações do Sistema</h2></div>
+<div class="card"><div class="card-body">
+<form method="POST" action="{{ url_for('settings') }}">
+    <div class="grid-2">
+        <div class="form-group"><label>Nome da Plataforma</label><input type="text" name="platform_name" class="form-input" value="{{ settings.get('platform_name', 'BiocognitivaPPSP') }}"></div>
+        <div class="form-group"><label>Máximo de Tentativas nas Avaliações</label><input type="number" name="max_tentativas" class="form-input" value="{{ settings.get('max_tentativas', 2) }}"></div>
+        <div class="form-group"><label>Nota Mínima (0 a 10)</label><input type="number" step="0.1" name="nota_minima" class="form-input" value="{{ settings.get('nota_minima', 8.0) }}"></div>
+        <div class="form-group"><label>Nota Máxima</label><input type="number" step="0.1" name="nota_maxima" class="form-input" value="{{ settings.get('nota_maxima', 10.0) }}"></div>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar Configurações</button>
+</form>
+</div></div>
+{% endblock %}

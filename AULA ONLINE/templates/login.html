@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Login - BiocognitivaPPSP{% endblock %}
+{% block auth_content %}
+<div class="auth-page"><div class="auth-bg"></div>
+<div class="auth-card">
+    <div class="auth-logo"><i class="fas fa-dna"></i><h1>Bio<b>PPSP</b></h1><p>Programa de Prevenção de Substâncias Psicoativas</p></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for c,m in messages %}<div class="flash flash-{{ c }}">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}
+    <form method="POST" class="auth-form">
+        <div class="form-group"><label><i class="fas fa-envelope"></i> Email</label><input type="email" name="email" placeholder="seu@email.com" required></div>
+        <div class="form-group"><label><i class="fas fa-lock"></i> Senha</label><input type="password" name="password" placeholder="••••••••" required></div>
+        <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-sign-in-alt"></i> Entrar</button>
+    </form>
+    <div class="auth-footer"><p>Não tem conta? <a href="{{ url_for('register') }}">Criar conta</a></p></div>
+    <div class="demo-credentials">
+        <p><strong>Contas Demo:</strong></p>
+        <small>Administrador: admin@biocognitiva.com.br / admin123</small><br>
+        <small>Supervisor: supervisor@novavia.com.br / super123</small><br>
+        <small>ADM Bio: adm@biocognitiva.com.br / adm123</small><br>
+        <small>Técnico: tecnico@biocognitiva.com.br / tec123</small><br>
+        <small>Colaborador: pedro@novavia.com.br / colab123</small>
+    </div>
+</div></div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block page_title %}Sorteios{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-random"></i> Sorteio de Alunos</h2></div>
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-dice"></i> Novo Sorteio</h2></div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('raffle_create') }}">
+                <div class="form-group"><label>Título</label><input type="text" name="title" class="form-input" value="Sorteio para Prova" required></div>
+                <div class="form-group"><label>Curso</label>
+                    <select name="course_id" class="form-select" required>
+                        {% for c in courses %}<option value="{{ c.id }}">{{ c.title }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group"><label>Quantidade de alunos</label><input type="number" name="num_selected" class="form-input" value="3" min="1" max="50"></div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-random"></i> Sortear</button>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-history"></i> Histórico</h2></div>
+        <div class="card-body">
+            {% for r in raffles %}
+            <div class="raffle-item">
+                <div><strong>{{ r.title }}</strong><br><small>{{ r.course_title or 'N/A' }} • {{ r.executed_at or r.created_at }}</small></div>
+                <div class="raffle-selected">
+                    {% for s in (r.selected_students|tojson|default('[]'))|safe %}{% endfor %}
+                    <span class="badge badge-success">{{ r.num_selected }} selecionados</span>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not raffles %}<p class="empty-state">Nenhum sorteio realizado.</p>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

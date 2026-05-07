@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block page_title %}Resultados de Exames{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-flask"></i> Resultados de Exames</h2></div>
+{% if user.role in ('tecnico','adm_biocognitiva','administrador') %}
+<div class="card mb-2"><div class="card-header"><h2><i class="fas fa-plus"></i> Lançar Resultado</h2></div><div class="card-body">
+<form method="POST" action="{{ url_for('resultado_novo') }}" enctype="multipart/form-data">
+    <div class="grid-3">
+        <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label>Resultado *</label><select name="resultado" class="form-select" required><option value="negativo">Negativo</option><option value="positivo">Positivo</option><option value="inconclusivo">Inconclusivo</option></select></div>
+        <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input"></div>
+    </div>
+    <div class="grid-4">
+        <div class="form-group"><label>Foto Doador</label><input type="file" name="foto_doador" class="form-input"></div>
+        <div class="form-group"><label>Foto Bafômetro</label><input type="file" name="foto_bafometro" class="form-input"></div>
+        <div class="form-group"><label>Foto Termo</label><input type="file" name="foto_termo" class="form-input"></div>
+        <div class="form-group"><label>Foto Documento</label><input type="file" name="foto_documento" class="form-input"></div>
+    </div>
+    <div class="form-group"><label>Arquivo Resultado (PDF)</label><input type="file" name="arquivo_resultado" class="form-input"></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Lançar Resultado</button>
+</form></div></div>
+{% endif %}
+
+<div class="card"><div class="card-header">
+    <h2><i class="fas fa-list"></i> Histórico de Resultados</h2>
+    <form class="search-form" method="GET"><input type="text" name="search" placeholder="Buscar por nome ou CPF..." value="{{ search }}" class="form-input" style="width: 300px; display: inline-block;"><button type="submit" class="btn btn-secondary"><i class="fas fa-search"></i> Buscar</button></form>
+</div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data Cadastro</th><th>Colaborador</th><th>Resultado</th><th>Observação</th><th>Arquivos</th></tr></thead><tbody>
+{% for r in resultados %}<tr>
+    <td>{{ r.created_at[:10] }}</td><td>{{ r.colab_name }}</td>
+    <td><span class="badge {% if r.resultado=='negativo' %}badge-success{% elif r.resultado=='positivo' %}badge-danger{% else %}badge-warning{% endif %}">{{ r.resultado.title() }}</span></td>
+    <td>{{ r.observacao }}</td>
+    <td>
+        {% if r.foto_doador %}<span class="badge badge-info" title="Foto Doador"><i class="fas fa-camera"></i> Doador</span>{% endif %}
+        {% if r.foto_bafometro %}<span class="badge badge-info" title="Foto Bafômetro"><i class="fas fa-camera"></i> Bafômetro</span>{% endif %}
+        {% if r.foto_termo_consentimento %}<span class="badge badge-info" title="Termo"><i class="fas fa-file-signature"></i> Termo</span>{% endif %}
+        {% if r.foto_documento %}<span class="badge badge-info" title="Documento"><i class="fas fa-id-card"></i> Doc</span>{% endif %}
+        {% if r.arquivo_resultado %}<span class="badge badge-success" title="Resultado PDF"><i class="fas fa-file-pdf"></i> PDF</span>{% endif %}
+    </td>
+</tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

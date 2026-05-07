@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block page_title %}Colaboradores{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-users"></i> Cadastro de Colaboradores ARSO</h2>
+{% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<a href="{{ url_for('colaborador_novo') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Novo</a>{% endif %}</div>
+<div class="card"><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Nome</th><th>CPF</th><th>Função</th><th>Admissão</th><th>Empresa</th><th>Status</th></tr></thead><tbody>
+{% for c in colaboradores %}<tr><td>{{ c.name }}</td><td>{{ c.cpf }}</td><td>{{ c.funcao }}</td><td>{{ c.data_admissao }}</td><td>{{ c.empresa }}</td><td><span class="badge badge-{{ c.status }}">{{ c.status.title() }}</span></td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

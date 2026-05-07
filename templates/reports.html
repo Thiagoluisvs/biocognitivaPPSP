@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block page_title %}Relatórios ANAC{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-chart-bar"></i> Relatórios ANAC</h2></div>
+<div class="stats-grid">
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-percentage"></i></div><div class="stat-info"><h3>{{ data.pass_rate|round(1) }}%</h3><p>Taxa de Aprovação</p></div></div>
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-chart-line"></i></div><div class="stat-info"><h3>{{ data.avg_grade|round(2) }}</h3><p>Nota Média</p></div></div>
+    <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.students|length }}</h3><p>Total de Alunos</p></div></div>
+</div>
+<div class="card">
+    <div class="card-header"><h2><i class="fas fa-history"></i> Histórico de Notas</h2></div>
+    <div class="card-body table-responsive">
+        <table class="table" id="gradesTable">
+            <thead><tr><th>Aluno</th><th>Curso</th><th>Prova</th><th>Nota</th><th>Mín.</th><th>Tentativa</th><th>Status</th><th>Data</th></tr></thead>
+            <tbody>
+            {% for g in data.grade_history %}
+            <tr>
+                <td>{{ g.student_name }}</td><td>{{ g.course_title }}</td><td>{{ g.quiz_title }}</td>
+                <td><span class="{% if g.passed %}grade-pass{% else %}grade-fail{% endif %}">{{ g.grade }}</span></td>
+                <td>{{ g.min_passing_grade }}</td><td>{{ g.attempt_number }}</td>
+                <td><span class="badge {% if g.passed %}badge-success{% else %}badge-danger{% endif %}">{% if g.passed %}Aprovado{% else %}Reprovado{% endif %}</span></td>
+                <td>{{ g.completed_at or '-' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

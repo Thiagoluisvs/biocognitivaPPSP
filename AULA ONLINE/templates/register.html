@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Registrar - Portal Toxicologia ANAC{% endblock %}
+{% block auth_content %}
+<div class="auth-page">
+    <div class="auth-bg"></div>
+    <div class="auth-card">
+        <div class="auth-logo">
+            <i class="fas fa-flask"></i>
+            <h1>ANAC<b>Toxi</b></h1>
+            <p>Criar nova conta</p>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for c, m in messages %}<div class="flash flash-{{ c }}">{{ m }}</div>{% endfor %}{% endif %}
+        {% endwith %}
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label><i class="fas fa-user"></i> Nome completo</label>
+                <input type="text" name="name" placeholder="Seu nome" required>
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-envelope"></i> Email</label>
+                <input type="email" name="email" placeholder="seu@email.com" required>
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-lock"></i> Senha</label>
+                <input type="password" name="password" placeholder="••••••••" required minlength="6">
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-user-tag"></i> Tipo de conta</label>
+                <select name="role" class="form-select">
+                    <option value="aluno">Aluno</option>
+                    <option value="instrutor">Instrutor</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-user-plus"></i> Criar Conta</button>
+        </form>
+        <div class="auth-footer">
+            <p>Já tem conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
