@@ -30,11 +30,14 @@
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="logo"><i class="fas fa-dna"></i><span>Bio<b>PPSP</b></span></div>
-        <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('collapsed')"><i class="fas fa-bars"></i></button>
+        <button class="sidebar-toggle" type="button" title="Recolher menu" aria-label="Recolher menu" onclick="document.getElementById('sidebar').classList.toggle('collapsed')"><i class="fas fa-bars"></i></button>
     </div>
     <div class="sidebar-user">
         <div class="avatar">{{ session.get('name','U')[0] }}</div>
-        <div class="user-info"><span class="user-name">{{ session.get('name') }}</span><span class="user-role">{{ session.get('role','').replace('_',' ').title() }}</span></div>
+        <div class="user-info">
+            <span class="user-name">{{ session.get('name') }}</span>
+            <span class="user-role">{{ session.get('role','').replace('_',' ').title() }}</span>
+        </div>
     </div>
     <ul class="sidebar-menu">
         <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i><span>Dashboard</span></a></li>
@@ -73,7 +76,7 @@
 </nav>
 <main class="main-content">
     <header class="topbar">
-        <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')"><i class="fas fa-bars"></i></button>
+        <button class="mobile-toggle" type="button" title="Abrir menu" aria-label="Abrir menu" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')"><i class="fas fa-bars"></i></button>
         <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
         <div class="topbar-actions">
             <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
