@@ -3,10 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}BiocognitivaPPSP{% endblock %}</title>
+    <title>{% block title %}Biocognitiva PPSP{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/biocognitiva.css') }}">
+    <script>
+        // Theme initialization
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon();
+        }
+        function updateThemeIcon() {
+            const toggle = document.querySelector('.theme-toggle i');
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            if (toggle) toggle.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        }
+        window.addEventListener('load', updateThemeIcon);
+    </script>
 </head>
 <body>
 {% if session.get('user_id') %}
@@ -58,7 +75,12 @@
     <header class="topbar">
         <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')"><i class="fas fa-bars"></i></button>
         <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
-        <div class="topbar-actions"><span class="badge badge-{{ session.get('role') }}">{{ session.get('role','').replace('_',' ').title() }}</span></div>
+        <div class="topbar-actions">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
+                <i class="fas fa-moon"></i>
+            </button>
+            <span class="badge badge-{{ session.get('role') }}">{{ session.get('role','').replace('_',' ').title() }}</span>
+        </div>
     </header>
     {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">{% for c,m in messages %}<div class="flash flash-{{ c }}"><i class="fas fa-{% if c=='success' %}check-circle{% elif c=='error' %}exclamation-circle{% elif c=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>{{ m }}<button class="flash-close" onclick="this.parentElement.remove()">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}
     <div class="content-area">{% block content %}{% endblock %}</div>

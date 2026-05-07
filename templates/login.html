@@ -1,23 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Login - BiocognitivaPPSP{% endblock %}
+{% block title %}Login - Biocognitiva PPSP{% endblock %}
 {% block auth_content %}
-<div class="auth-page"><div class="auth-bg"></div>
-<div class="auth-card">
-    <div class="auth-logo"><i class="fas fa-dna"></i><h1>Bio<b>PPSP</b></h1><p>Programa de Prevenção de Substâncias Psicoativas</p></div>
-    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for c,m in messages %}<div class="flash flash-{{ c }}">{{ m }}</div>{% endfor %}{% endif %}{% endwith %}
-    <form method="POST" class="auth-form">
-        <div class="form-group"><label><i class="fas fa-envelope"></i> Email</label><input type="email" name="email" placeholder="seu@email.com" required></div>
-        <div class="form-group"><label><i class="fas fa-lock"></i> Senha</label><input type="password" name="password" placeholder="••••••••" required></div>
-        <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-sign-in-alt"></i> Entrar</button>
-    </form>
-    <div class="auth-footer"><p>Não tem conta? <a href="{{ url_for('register') }}">Criar conta</a></p></div>
-    <div class="demo-credentials">
-        <p><strong>Contas Demo:</strong></p>
-        <small>Administrador: admin@biocognitiva.com.br / admin123</small><br>
-        <small>Supervisor: supervisor@novavia.com.br / super123</small><br>
-        <small>ADM Bio: adm@biocognitiva.com.br / adm123</small><br>
-        <small>Técnico: tecnico@biocognitiva.com.br / tec123</small><br>
-        <small>Colaborador: pedro@novavia.com.br / colab123</small>
+<div class="auth-page">
+    <div class="auth-bg"></div>
+    <div class="auth-card">
+        <div class="auth-logo">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 8px;">
+                <rect width="48" height="48" rx="8" fill="#7BC000"/>
+                <text x="24" y="32" font-size="24" font-weight="bold" fill="white" text-anchor="middle" font-family="Arial, sans-serif">B</text>
+            </svg>
+            <h1>Biocognitiva <b>PPSP</b></h1>
+            <p>Plataforma de Prevenção de Substâncias Psicoativas</p>
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for c,m in messages %}
+            <div class="flash flash-{{ c }}">
+                <i class="fas fa-{% if c == 'success' %}check-circle{% elif c == 'error' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                {{ m }}
+            </div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+        
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="email">
+                    <i class="fas fa-envelope"></i> Email
+                </label>
+                <input type="email" id="email" name="email" placeholder="seu@email.com" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">
+                    <i class="fas fa-lock"></i> Senha
+                </label>
+                <input type="password" id="password" name="password" placeholder="••••••••" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-full">
+                <i class="fas fa-sign-in-alt"></i> Entrar no Sistema
+            </button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Não tem conta? <a href="{{ url_for('register') }}">Criar nova conta</a></p>
+        </div>
+        
+        <div class="demo-credentials">
+            <p><strong>Contas de Teste Disponíveis:</strong></p>
+            <small><strong>Administrador:</strong> admin@biocognitiva.com.br / admin123</small><br>
+            <small><strong>Supervisor:</strong> supervisor@novavia.com.br / super123</small><br>
+            <small><strong>ADM Bio:</strong> adm@biocognitiva.com.br / adm123</small><br>
+            <small><strong>Técnico:</strong> tecnico@biocognitiva.com.br / tec123</small><br>
+            <small><strong>Colaborador:</strong> pedro@novavia.com.br / colab123</small>
+        </div>
     </div>
-</div></div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">
+    <i class="fas fa-moon"></i>
+</button>
 {% endblock %}
