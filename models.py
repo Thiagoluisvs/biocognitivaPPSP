@@ -50,14 +50,14 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (registered_by) REFERENCES users(id)
     )''')
 
-    # Scheduling collections (tab 4 - Agendar coleta/atendimento)
+    # Scheduling — release 2.0: exames em JSON (mínimo 2 de 3 tipos no app)
     c.execute('''CREATE TABLE IF NOT EXISTS agendamentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         colaborador_id INTEGER NOT NULL,
-        motivo TEXT NOT NULL CHECK(motivo IN ('admissao','periodico','aleatorio','acidente','suspeita_justificada')),
+        motivo TEXT NOT NULL,
         data_coleta DATE NOT NULL, horario_coleta TEXT NOT NULL,
         local_coleta TEXT NOT NULL CHECK(local_coleta IN ('biocognitiva','in_company')),
-        tipo_exame TEXT NOT NULL CHECK(tipo_exame IN ('alcoolemia','toxicologico_queratina','toxicologico_urina')),
+        exames TEXT NOT NULL DEFAULT '[]',
         status TEXT DEFAULT 'agendado' CHECK(status IN ('agendado','realizado','falta','cancelado')),
         observacao TEXT DEFAULT '',
         agendado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -72,6 +72,7 @@ def init_db():
         motivo TEXT NOT NULL CHECK(motivo IN ('admissao','periodico')),
         tipo TEXT DEFAULT 'in_company' CHECK(tipo IN ('in_company','online','presencial')),
         data_treinamento DATE, horario TEXT DEFAULT '',
+        arquivo_gravacao TEXT DEFAULT '',
         status TEXT DEFAULT 'agendado' CHECK(status IN ('agendado','realizado','cancelado')),
         agendado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
@@ -82,6 +83,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS resultados_exames (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         colaborador_id INTEGER NOT NULL, agendamento_id INTEGER,
+        data_coleta TEXT DEFAULT '',
         resultado TEXT DEFAULT 'pendente' CHECK(resultado IN ('pendente','negativo','positivo','inconclusivo')),
         observacao TEXT DEFAULT '',
         foto_doador TEXT DEFAULT '', foto_bafometro TEXT DEFAULT '',
@@ -173,16 +175,37 @@ def init_db():
         FOREIGN KEY (registrado_por) REFERENCES users(id)
     )''')
 
-    # Positive sample control (Técnico - Controle positivo)
+    # Eventos impeditivos (ex-controle positivo)
     c.execute('''CREATE TABLE IF NOT EXISTS controle_positivo (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         colaborador_id INTEGER NOT NULL, resultado_id INTEGER,
+        tipo_evento TEXT NOT NULL DEFAULT 'positivo_amostra' CHECK(tipo_evento IN (
+            'positivo_amostra','agendamento_avaliacao_psicologica','agendamento_medico_revisor')),
+        data_agendamento TEXT DEFAULT '', horario_agendamento TEXT DEFAULT '',
         info_amostra TEXT DEFAULT '', remessa_correio TEXT DEFAULT '',
         arquivo_resultado TEXT DEFAULT '', observacao TEXT DEFAULT '',
         registrado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
         FOREIGN KEY (resultado_id) REFERENCES resultados_exames(id),
         FOREIGN KEY (registrado_por) REFERENCES users(id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS clientes_empresa (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        razao_social TEXT NOT NULL, nome_fantasia TEXT DEFAULT '', cnpj TEXT DEFAULT '',
+        cidade TEXT DEFAULT '', contato_nome TEXT DEFAULT '',
+        telefone TEXT DEFAULT '', email TEXT DEFAULT '', observacao TEXT DEFAULT '',
+        registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (registered_by) REFERENCES users(id)
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS subcontratadas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome_fantasia TEXT NOT NULL, razao_social TEXT DEFAULT '', cnpj TEXT DEFAULT '',
+        contato_nome TEXT DEFAULT '', telefone TEXT DEFAULT '', email TEXT DEFAULT '',
+        observacao TEXT DEFAULT '',
+        registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (registered_by) REFERENCES users(id)
     )''')
 
     # Rastreabilidade positivas (ADM tab 10)
@@ -245,6 +268,134 @@ def init_db():
 
     conn.commit()
     conn.close()
+    migrate_schema()
+
+
+def _table_columns(cursor, table):
+    try:
+        return {row[1] for row in cursor.execute('PRAGMA table_info(%s)' % table).fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def _migrate_agendamentos_v2(conn):
+    c = conn.cursor()
+    rows = c.execute('SELECT * FROM agendamentos').fetchall()
+    c.execute('PRAGMA foreign_keys=OFF')
+    c.execute('DROP TABLE IF EXISTS agendamentos_new')
+    c.execute('''CREATE TABLE agendamentos_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        colaborador_id INTEGER NOT NULL,
+        motivo TEXT NOT NULL,
+        data_coleta DATE NOT NULL, horario_coleta TEXT NOT NULL,
+        local_coleta TEXT NOT NULL CHECK(local_coleta IN ('biocognitiva','in_company')),
+        exames TEXT NOT NULL DEFAULT '[]',
+        status TEXT DEFAULT 'agendado' CHECK(status IN ('agendado','realizado','falta','cancelado')),
+        observacao TEXT DEFAULT '',
+        agendado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
+        FOREIGN KEY (agendado_por) REFERENCES users(id)
+    )''')
+    motmap = {
+        'admissao': 'exame_admissional',
+        'periodico': 'exame_acompanhamento',
+        'aleatorio': 'exame_aleatorio',
+        'acidente': 'exame_pos_acidente',
+        'suspeita_justificada': 'exame_aleatorio',
+    }
+    for r in rows:
+        old_m = r['motivo']
+        new_m = motmap.get(old_m, old_m)
+        tipo = r['tipo_exame']
+        exames_json = json.dumps([tipo] if tipo else ['toxicologico_urina'])
+        obs = r['observacao'] if r['observacao'] is not None else ''
+        c.execute(
+            '''INSERT INTO agendamentos_new (id, colaborador_id, motivo, data_coleta, horario_coleta, local_coleta, exames, status, observacao, agendado_por, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+            (r['id'], r['colaborador_id'], new_m, r['data_coleta'], r['horario_coleta'], r['local_coleta'], exames_json, r['status'], obs, r['agendado_por'], r['created_at']),
+        )
+    c.execute('DROP TABLE agendamentos')
+    c.execute('ALTER TABLE agendamentos_new RENAME TO agendamentos')
+    c.execute('PRAGMA foreign_keys=ON')
+    try:
+        mx_row = c.execute('SELECT MAX(id) FROM agendamentos').fetchone()
+        mx = int(mx_row[0]) if mx_row and mx_row[0] is not None else 0
+        c.execute("DELETE FROM sqlite_sequence WHERE name='agendamentos'")
+        if mx > 0:
+            c.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('agendamentos', ?)", (mx,))
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
+
+
+def migrate_schema():
+    conn = get_db()
+    c = conn.cursor()
+    ac = _table_columns(c, 'agendamentos')
+    if ac and 'exames' not in ac and 'tipo_exame' in ac:
+        _migrate_agendamentos_v2(conn)
+        c = conn.cursor()
+        ac = _table_columns(c, 'agendamentos')
+    if ac and 'exames' not in ac:
+        try:
+            c.execute("ALTER TABLE agendamentos ADD COLUMN exames TEXT NOT NULL DEFAULT '[]'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+
+    tc = _table_columns(c, 'treinamentos')
+    if tc and 'arquivo_gravacao' not in tc:
+        try:
+            c.execute('ALTER TABLE treinamentos ADD COLUMN arquivo_gravacao TEXT DEFAULT ""')
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+
+    rc = _table_columns(c, 'resultados_exames')
+    if rc and 'data_coleta' not in rc:
+        try:
+            c.execute('ALTER TABLE resultados_exames ADD COLUMN data_coleta TEXT DEFAULT ""')
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+
+    cp = _table_columns(c, 'controle_positivo')
+    if cp:
+        for col, decl in (
+            ('tipo_evento', "ALTER TABLE controle_positivo ADD COLUMN tipo_evento TEXT DEFAULT 'positivo_amostra'"),
+            ('data_agendamento', 'ALTER TABLE controle_positivo ADD COLUMN data_agendamento TEXT DEFAULT ""'),
+            ('horario_agendamento', 'ALTER TABLE controle_positivo ADD COLUMN horario_agendamento TEXT DEFAULT ""'),
+        ):
+            if col not in cp:
+                try:
+                    c.execute(decl)
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    conn.rollback()
+                cp.add(col)
+
+    for create in (
+        '''CREATE TABLE IF NOT EXISTS clientes_empresa (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        razao_social TEXT NOT NULL, nome_fantasia TEXT DEFAULT '', cnpj TEXT DEFAULT '',
+        cidade TEXT DEFAULT '', contato_nome TEXT DEFAULT '',
+        telefone TEXT DEFAULT '', email TEXT DEFAULT '', observacao TEXT DEFAULT '',
+        registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (registered_by) REFERENCES users(id)
+    )''',
+        '''CREATE TABLE IF NOT EXISTS subcontratadas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome_fantasia TEXT NOT NULL, razao_social TEXT DEFAULT '', cnpj TEXT DEFAULT '',
+        contato_nome TEXT DEFAULT '', telefone TEXT DEFAULT '', email TEXT DEFAULT '',
+        observacao TEXT DEFAULT '',
+        registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (registered_by) REFERENCES users(id)
+    )''',
+    ):
+        c.execute(create)
+    conn.commit()
+    conn.close()
+
 
 def seed_demo_data():
     conn = get_db()
@@ -276,16 +427,19 @@ def seed_demo_data():
         c.execute('''INSERT INTO colaboradores (name, cpf, endereco, funcao, data_admissao, telefone, email, empresa, registered_by)
             VALUES (?,?,?,?,?,?,?,?,?)''', (n, cpf, end, func, adm, tel, em, emp, reg))
 
-    # Demo appointments
+    # Demo appointments (mínimo 2 exames)
     today = datetime.now().strftime('%Y-%m-%d')
     agends = [
-        (1, 'periodico', today, '08:00', 'biocognitiva', 'toxicologico_urina', 'agendado', 2),
-        (2, 'admissao', today, '09:00', 'biocognitiva', 'alcoolemia', 'agendado', 2),
-        (3, 'aleatorio', today, '10:00', 'in_company', 'toxicologico_queratina', 'realizado', 2),
+        (1, 'exame_acompanhamento', today, '08:00', 'biocognitiva', json.dumps(['toxicologico_urina', 'toxicologico_queratina']), 'agendado', 2),
+        (2, 'exame_admissional', today, '09:00', 'biocognitiva', json.dumps(['alcoolemia', 'toxicologico_urina']), 'agendado', 2),
+        (3, 'exame_aleatorio', today, '10:00', 'in_company', json.dumps(['toxicologico_queratina', 'alcoolemia']), 'realizado', 2),
     ]
-    for cid, mot, dt, hr, loc, tp, st, by in agends:
-        c.execute('''INSERT INTO agendamentos (colaborador_id, motivo, data_coleta, horario_coleta, local_coleta, tipo_exame, status, agendado_por)
-            VALUES (?,?,?,?,?,?,?,?)''', (cid, mot, dt, hr, loc, tp, st, by))
+    for cid, mot, dt, hr, loc, exj, st, by in agends:
+        c.execute(
+            '''INSERT INTO agendamentos (colaborador_id, motivo, data_coleta, horario_coleta, local_coleta, exames, status, agendado_por)
+            VALUES (?,?,?,?,?,?,?,?)''',
+            (cid, mot, dt, hr, loc, exj, st, by),
+        )
 
     # Demo video lessons
     videos = [

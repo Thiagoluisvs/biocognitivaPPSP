@@ -1,26 +1,42 @@
 {% extends "base.html" %}
 {% block page_title %}Agendamentos{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-calendar-alt"></i> Agendar Coleta / Atendimento</h2></div>
+<div class="page-header"><h2><i class="fas fa-calendar-alt"></i> Agendar coleta</h2><p class="text-muted">PPSP: escolha o motivo e <strong>no mínimo dois</strong> exames dentre toxicológico urina, toxicológico queratina e alcolemia.</p></div>
 <div class="grid-2">
 {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Novo Agendamento</h2></div><div class="card-body">
+<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Novo agendamento</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('agendamento_novo') }}">
     <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label>Motivo da Solicitação *</label><select name="motivo" class="form-select" required>
-        <option value="admissao">Admissão</option><option value="periodico">Periódico</option><option value="aleatorio">Aleatório</option><option value="acidente">Acidente</option><option value="suspeita_justificada">Suspeita Justificada</option></select></div>
+    <div class="form-group"><label>Motivo *</label><select name="motivo" class="form-select" required>
+        {% for key in ['exame_admissional','exame_aleatorio','exame_pos_acidente','exame_retorno_servico','exame_acompanhamento'] %}
+        <option value="{{ key }}">{{ motivos_agendamento[key] }}</option>
+        {% endfor %}
+    </select></div>
     <div class="grid-2">
-        <div class="form-group"><label>Data da Coleta *</label><input type="date" name="data_coleta" class="form-input" required></div>
+        <div class="form-group"><label>Data da coleta *</label><input type="date" name="data_coleta" class="form-input" required></div>
         <div class="form-group"><label>Horário *</label><input type="time" name="horario_coleta" class="form-input" required></div>
     </div>
-    <div class="form-group"><label>Local da Coleta *</label><select name="local_coleta" class="form-select"><option value="biocognitiva">Biocognitiva</option><option value="in_company">In Company</option></select></div>
-    <div class="form-group"><label>Tipo de Exame *</label><select name="tipo_exame" class="form-select"><option value="alcoolemia">Alcoolemia</option><option value="toxicologico_queratina">Toxicológico Queratina</option><option value="toxicologico_urina">Toxicológico Urina</option></select></div>
+    <div class="form-group"><label>Local *</label><select name="local_coleta" class="form-select"><option value="biocognitiva">Biocognitiva</option><option value="in_company">In company</option></select></div>
+    <div class="form-group"><label>Exames * <small>(mínimo 2)</small></label>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.5rem;">
+            {% for val, lab in tipos_exame_agendamento %}
+            <label style="cursor:pointer;display:flex;align-items:center;gap:.35rem;"><input type="checkbox" name="exames" value="{{ val }}"> {{ lab }}</label>
+            {% endfor %}
+        </div>
+    </div>
     <button type="submit" class="btn btn-primary"><i class="fas fa-calendar-plus"></i> Agendar</button>
 </form></div></div>
 {% endif %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Agendamentos</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Hora</th><th>Local</th><th>Exame</th><th>Status</th></tr></thead><tbody>
-{% for a in agendamentos %}<tr><td>{{ a.colab_name }}</td><td>{{ a.motivo.replace('_',' ').title() }}</td><td>{{ a.data_coleta }}</td><td>{{ a.horario_coleta }}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td><td>{{ a.tipo_exame.replace('_',' ').title() }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>{% endfor %}
+<table class="table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Hora</th><th>Local</th><th>Exames</th><th>Status</th></tr></thead><tbody>
+{% for a in agendamentos %}<tr>
+    <td>{{ a.colab_name }}</td>
+    <td><span class="badge badge-info">{{ a.motivo|label_motivo_agendamento }}</span></td>
+    <td>{{ a.data_coleta }}</td><td>{{ a.horario_coleta }}</td>
+    <td>{{ a.local_coleta.replace('_',' ').title() }}</td>
+    <td>{% for ex in a.exames|exames_json_list %}<span class="badge badge-secondary">{{ ex|label_exame_agendamento }}</span>{% endfor %}</td>
+    <td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td>
+</tr>{% endfor %}
 </tbody></table></div></div>
 </div>
 {% endblock %}

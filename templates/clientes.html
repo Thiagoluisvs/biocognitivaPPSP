@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block page_title %}Cadastro de clientes{% endblock %}
+{% block content %}
+<div class="page-header"><h2><i class="fas fa-handshake"></i> Cadastro de clientes</h2><p class="text-muted">Empresas contratantes (ADM Biocognitiva). Release {{ app_release }}.</p></div>
+<div class="grid-2">
+<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Novo cliente</h2></div><div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Razão social *</label><input type="text" name="razao_social" class="form-input" required></div>
+    <div class="grid-2"><div class="form-group"><label>Nome fantasia</label><input type="text" name="nome_fantasia" class="form-input"></div>
+    <div class="form-group"><label>CNPJ</label><input type="text" name="cnpj" class="form-input"></div></div>
+    <div class="form-group"><label>Cidade</label><input type="text" name="cidade" class="form-input"></div>
+    <div class="grid-2"><div class="form-group"><label>Contato</label><input type="text" name="contato_nome" class="form-input"></div>
+    <div class="form-group"><label>Telefone</label><input type="text" name="telefone" class="form-input"></div></div>
+    <div class="form-group"><label>E-mail</label><input type="email" name="email" class="form-input"></div>
+    <div class="form-group"><label>Observação</label><textarea name="observacao" class="form-input" rows="2"></textarea></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
+</form></div></div>
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Clientes</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Razão social</th><th>CNPJ</th><th>Cidade</th><th>Contato</th><th>Telefone</th></tr></thead><tbody>
+{% for cl in clientes %}<tr>
+    <td><strong>{{ cl.razao_social }}</strong>{% if cl.nome_fantasia %}<br><small>{{ cl.nome_fantasia }}</small>{% endif %}</td>
+    <td>{{ cl.cnpj or '—' }}</td><td>{{ cl.cidade or '—' }}</td><td>{{ cl.contato_nome or '—' }}</td><td>{{ cl.telefone or '—' }}</td>
+</tr>{% else %}<tr><td colspan="5">Nenhum cliente cadastrado.</td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

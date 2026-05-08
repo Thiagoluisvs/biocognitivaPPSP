@@ -1,21 +1,36 @@
 {% extends "base.html" %}
-{% block page_title %}Controle Positivo{% endblock %}
+{% block page_title %}Eventos impeditivos{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-exclamation-triangle"></i> Controle de Amostras Positivas</h2></div>
+<div class="page-header"><h2><i class="fas fa-ban"></i> Eventos impeditivos</h2><p class="text-muted">Positividade de amostra ou agendamentos de avaliação psicológica / médico revisor.</p></div>
 <div class="grid-2">
-<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar Controle Positivo</h2></div><div class="card-body">
-<form method="POST" action="{{ url_for('controle_positivo_novo') }}" enctype="multipart/form-data">
+<div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar</h2></div><div class="card-body">
+<form method="POST" action="{{ url_for('controle_positivo_novo') }}" enctype="multipart/form-data" id="frm">
+    <div class="form-group"><label>Tipo *</label><select name="tipo_evento" class="form-select" id="tipo_evento">
+        <option value="positivo_amostra">Amostra positiva / laboratorial</option>
+        <option value="agendamento_avaliacao_psicologica">Agendamento — Avaliação psicológica</option>
+        <option value="agendamento_medico_revisor">Agendamento — Médico revisor</option>
+    </select></div>
     <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label>Info da Amostra (Lote/Código)</label><input type="text" name="info_amostra" class="form-input"></div>
-    <div class="form-group"><label>Remessa por Correio (Rastreio)</label><input type="text" name="remessa_correio" class="form-input"></div>
-    <div class="form-group"><label>Arquivo Resultado (Análise)</label><input type="file" name="arquivo" class="form-input"></div>
+    <div class="grid-2" id="bloco_ag" style="display:none;"><div class="form-group"><label>Data prevista</label><input type="date" name="data_agendamento" class="form-input"></div>
+    <div class="form-group"><label>Horário</label><input type="time" name="horario_agendamento" class="form-input"></div></div>
+    <div id="bloco_lab">
+        <div class="form-group"><label>Info da amostra</label><input type="text" name="info_amostra" class="form-input"></div>
+        <div class="form-group"><label>Remessa / rastreio</label><input type="text" name="remessa_correio" class="form-input"></div>
+        <div class="form-group"><label>Anexo</label><input type="file" name="arquivo" class="form-input"></div>
+    </div>
     <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input"></div>
-    <button type="submit" class="btn btn-warning"><i class="fas fa-exclamation-triangle"></i> Registrar Controle</button>
+    <button type="submit" class="btn btn-warning"><i class="fas fa-save"></i> Registrar</button>
 </form></div></div>
-
-<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Registros de Positivos</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Colaborador</th><th>Amostra</th><th>Rastreio</th></tr></thead><tbody>
-{% for c in controles %}<tr><td>{{ c.created_at[:10] }}</td><td>{{ c.colab_name }}</td><td>{{ c.info_amostra }}</td><td>{{ c.remessa_correio }}</td></tr>{% endfor %}
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Registros</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Colaborador</th><th>Agendamento</th><th>Observações</th></tr></thead><tbody>
+{% for cp in controles %}<tr>
+    <td>{{ cp.created_at[:10] }}</td>
+    <td>{{ (cp.tipo_evento or 'positivo_amostra')|label_evento_impeditivo }}</td>
+    <td>{{ cp.colab_name }}</td>
+    <td>{% if cp.data_agendamento %}{{ cp.data_agendamento }}{% if cp.horario_agendamento %} {{ cp.horario_agendamento }}{% endif %}{% else %}—{% endif %}</td>
+    <td>{{ cp.info_amostra or cp.remessa_correio or cp.observacao or '—' }}</td>
+</tr>{% endfor %}
 </tbody></table></div></div>
 </div>
+<script>(function(){var s=document.getElementById('tipo_evento');var la=document.getElementById('bloco_lab');var ag=document.getElementById('bloco_ag');function u(){var v=s.value;var e=v.indexOf('agendamento_')===0;if(la)la.style.display=e?'none':'block';if(ag)ag.style.display=e?'grid':'none';}if(s){s.onchange=u;u();}})();</script>
 {% endblock %}

@@ -1,5 +1,5 @@
-"""BiocognitivaPPSP - Main App"""
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory
+"""BiocognitivaPPSP - Main App — release 2.0"""
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -12,6 +12,60 @@ app.secret_key = 'biocognitiva-ppsp-2026'
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 ALLOWED_EXT = {'pdf','doc','docx','xls','xlsx','ppt','pptx','jpg','jpeg','png','mp4','zip'}
+
+MOTIVO_AGENDAMENTO_LABELS = {
+    'exame_admissional': 'Exame admissional',
+    'exame_aleatorio': 'Exame aleatório',
+    'exame_pos_acidente': 'Exame pós-acidente',
+    'exame_retorno_servico': 'Exame de retorno ao serviço',
+    'exame_acompanhamento': 'Exame de acompanhamento',
+}
+MOTIVOS_AGENDAMENTO_VALIDOS = frozenset(MOTIVO_AGENDAMENTO_LABELS.keys())
+TIPOS_EXAME_AGENDAMENTO = (
+    ('toxicologico_urina', 'Toxicológico urina'),
+    ('toxicologico_queratina', 'Toxicológico queratina'),
+    ('alcoolemia', 'Alcolemia'),
+)
+TIPOS_EXAME_VALIDOS = frozenset(t[0] for t in TIPOS_EXAME_AGENDAMENTO)
+_EXAME_ORDER = {t[0]: i for i, t in enumerate(TIPOS_EXAME_AGENDAMENTO)}
+TIPO_EVENTO_LABELS = {
+    'positivo_amostra': 'Amostra positiva / laboratorial',
+    'agendamento_avaliacao_psicologica': 'Agendamento — Avaliação psicológica',
+    'agendamento_medico_revisor': 'Agendamento — Médico revisor',
+}
+
+
+@app.template_filter('exames_json_list')
+def exames_json_list(s):
+    try:
+        return json.loads(s) if s else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+@app.template_filter('label_exame_agendamento')
+def label_exame_agendamento(code):
+    return dict(TIPOS_EXAME_AGENDAMENTO).get(code, (code or '').replace('_', ' ').title())
+
+
+@app.template_filter('label_motivo_agendamento')
+def label_motivo_agendamento(code):
+    return MOTIVO_AGENDAMENTO_LABELS.get(code, (code or '').replace('_', ' ').title())
+
+
+@app.template_filter('label_evento_impeditivo')
+def label_evento_impeditivo(code):
+    return TIPO_EVENTO_LABELS.get(code, (code or '').replace('_', ' ').title())
+
+
+@app.context_processor
+def inject_release():
+    return {
+        'motivos_agendamento': MOTIVO_AGENDAMENTO_LABELS,
+        'tipos_exame_agendamento': TIPOS_EXAME_AGENDAMENTO,
+        'app_release': '2.0',
+    }
+
 
 def allowed_file(f):
     return '.' in f and f.rsplit('.',1)[1].lower() in ALLOWED_EXT
@@ -39,6 +93,20 @@ def get_user():
     if 'user_id' not in session: return None
     db=get_db(); u=db.execute('SELECT * FROM users WHERE id=?',(session['user_id'],)).fetchone(); db.close()
     return u
+
+
+@app.route('/documentos/<path:filename>')
+@login_required
+def serve_document(filename):
+    base = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], 'documents'))
+    safe = secure_filename(os.path.basename(filename))
+    if not safe:
+        abort(404)
+    full = os.path.abspath(os.path.join(base, safe))
+    if not full.startswith(base) or not os.path.isfile(full):
+        abort(404)
+    return send_from_directory(base, safe, as_attachment=False)
+
 
 def save_upload(file, subfolder='documents'):
     fn=secure_filename(file.filename); ts=datetime.now().strftime('%Y%m%d%H%M%S')
@@ -124,12 +192,16 @@ def colaboradores():
 def colaborador_novo():
     u=get_user()
     if request.method=='POST':
+        tel=(request.form.get('telefone') or '').strip()
+        if not tel:
+            flash('Telefone é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=None)
         db=get_db()
         db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
             VALUES (?,?,?,?,?,?,?,?,?)''',
             (request.form['name'],request.form['cpf'],request.form.get('endereco',''),
              request.form.get('funcao','ARSO'),request.form.get('data_admissao',''),
-             request.form.get('telefone',''),request.form.get('email',''),
+             tel,request.form.get('email',''),
              request.form.get('empresa',''),u['id']))
         db.commit(); db.close(); flash('Colaborador cadastrado!','success')
         return redirect(url_for('colaboradores'))
@@ -148,11 +220,23 @@ def agendamentos():
 @login_required
 @role_required('supervisor','adm_biocognitiva','administrador')
 def agendamento_novo():
-    u=get_user(); db=get_db()
-    db.execute('''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,tipo_exame,agendado_por)
+    u=get_user()
+    motivo=request.form.get('motivo','')
+    if motivo not in MOTIVOS_AGENDAMENTO_VALIDOS:
+        flash('Motivo de agendamento inválido.','error')
+        return redirect(url_for('agendamentos'))
+    raw=request.form.getlist('exames')
+    exames=sorted({e for e in raw if e in TIPOS_EXAME_VALIDOS}, key=lambda x: _EXAME_ORDER.get(x, 99))
+    if len(exames)<2:
+        flash('Selecione no mínimo dois exames por agendamento (PPSP).','error')
+        return redirect(url_for('agendamentos'))
+    db=get_db()
+    db.execute(
+        '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
         VALUES (?,?,?,?,?,?,?)''',
-        (request.form['colaborador_id'],request.form['motivo'],request.form['data_coleta'],
-         request.form['horario_coleta'],request.form['local_coleta'],request.form['tipo_exame'],u['id']))
+        (request.form['colaborador_id'],motivo,request.form['data_coleta'],
+         request.form['horario_coleta'],request.form['local_coleta'],json.dumps(exames),u['id']),
+    )
     db.commit(); db.close(); flash('Agendamento criado!','success')
     return redirect(url_for('agendamentos'))
 
@@ -169,12 +253,25 @@ def treinamentos():
 @login_required
 @role_required('supervisor','adm_biocognitiva','administrador')
 def treinamento_novo():
-    u=get_user(); db=get_db()
-    db.execute('''INSERT INTO treinamentos (colaborador_id,titulo,motivo,tipo,data_treinamento,horario,agendado_por)
-        VALUES (?,?,?,?,?,?,?)''',
-        (request.form.get('colaborador_id'),request.form['titulo'],request.form['motivo'],
+    u=get_user()
+    arq=''
+    if 'arquivo_gravacao' in request.files and request.files['arquivo_gravacao'].filename:
+        f=request.files['arquivo_gravacao']
+        if allowed_file(f):
+            arq,_,_=save_upload(f,'documents')
+        else:
+            flash('Formato de arquivo não permitido.','error')
+            return redirect(url_for('treinamentos'))
+    _cid=(request.form.get('colaborador_id') or '').strip()
+    colab_id=int(_cid) if _cid.isdigit() else None
+    db=get_db()
+    db.execute(
+        '''INSERT INTO treinamentos (colaborador_id,titulo,motivo,tipo,data_treinamento,horario,arquivo_gravacao,agendado_por)
+        VALUES (?,?,?,?,?,?,?,?)''',
+        (colab_id,request.form['titulo'],request.form['motivo'],
          request.form.get('tipo','in_company'),request.form.get('data_treinamento',''),
-         request.form.get('horario',''),u['id']))
+         request.form.get('horario',''),arq,u['id']),
+    )
     db.commit(); db.close(); flash('Treinamento agendado!','success')
     return redirect(url_for('treinamentos'))
 
@@ -184,7 +281,9 @@ def treinamento_novo():
 def resultados():
     u=get_user(); db=get_db()
     search=request.args.get('search','')
-    q='SELECT r.*,c.name as colab_name FROM resultados_exames r JOIN colaboradores c ON r.colaborador_id=c.id'
+    q=('SELECT r.*,c.name as colab_name, a.data_coleta AS agendamento_data_coleta '
+       'FROM resultados_exames r JOIN colaboradores c ON r.colaborador_id=c.id '
+       'LEFT JOIN agendamentos a ON r.agendamento_id=a.id')
     if search: q+=f" WHERE c.name LIKE '%{search}%' OR c.cpf LIKE '%{search}%'"
     q+=' ORDER BY r.created_at DESC'
     res=db.execute(q).fetchall()
@@ -205,11 +304,17 @@ def resultado_novo():
             elif field=='foto_termo': foto_termo=s
             elif field=='foto_documento': foto_doc=s
             elif field=='arquivo_resultado': arq_res=s
-    db.execute('''INSERT INTO resultados_exames (colaborador_id,agendamento_id,resultado,observacao,foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,lancado_por)
-        VALUES (?,?,?,?,?,?,?,?,?,?)''',
-        (request.form['colaborador_id'],request.form.get('agendamento_id') or None,
+    data_coleta=(request.form.get('data_coleta') or '').strip()
+    if not data_coleta:
+        db.close(); flash('Data da coleta é obrigatória.','error')
+        return redirect(url_for('resultados'))
+    db.execute(
+        '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,resultado,observacao,foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,lancado_por)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+        (request.form['colaborador_id'],request.form.get('agendamento_id') or None,data_coleta,
          request.form.get('resultado','pendente'),request.form.get('observacao',''),
-         foto_doador,foto_baf,foto_termo,foto_doc,arq_res,u['id']))
+         foto_doador,foto_baf,foto_termo,foto_doc,arq_res,u['id']),
+    )
     db.commit(); db.close(); flash('Resultado lançado!','success')
     return redirect(url_for('resultados'))
 
@@ -223,7 +328,7 @@ def relatorios():
 
 @app.route('/relatorio/upload', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador')
 def relatorio_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -338,7 +443,7 @@ def institucional():
 
 @app.route('/institucional/upload', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador')
 def institucional_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -410,14 +515,78 @@ def controle_positivo():
 @login_required
 @role_required('tecnico','adm_biocognitiva','administrador')
 def controle_positivo_novo():
-    u=get_user(); arq=''
+    u=get_user()
+    tipo=request.form.get('tipo_evento','positivo_amostra')
+    if tipo not in TIPO_EVENTO_LABELS:
+        tipo='positivo_amostra'
+    arq=''
     if 'arquivo' in request.files and request.files['arquivo'].filename:
         arq,_,_=save_upload(request.files['arquivo'],'documents')
+    da=(request.form.get('data_agendamento') or '').strip()
+    ha=(request.form.get('horario_agendamento') or '').strip()
     db=get_db()
-    db.execute('INSERT INTO controle_positivo (colaborador_id,info_amostra,remessa_correio,arquivo_resultado,observacao,registrado_por) VALUES (?,?,?,?,?,?)',
-        (request.form['colaborador_id'],request.form.get('info_amostra',''),request.form.get('remessa_correio',''),arq,request.form.get('observacao',''),u['id']))
-    db.commit(); db.close(); flash('Controle positivo registrado!','success')
+    db.execute(
+        '''INSERT INTO controle_positivo (colaborador_id,tipo_evento,data_agendamento,horario_agendamento,info_amostra,remessa_correio,arquivo_resultado,observacao,registrado_por)
+        VALUES (?,?,?,?,?,?,?,?,?)''',
+        (request.form['colaborador_id'],tipo,da,ha,
+         request.form.get('info_amostra',''),request.form.get('remessa_correio',''),arq,request.form.get('observacao',''),u['id']),
+    )
+    db.commit(); db.close(); flash('Evento impeditivo registrado!','success')
     return redirect(url_for('controle_positivo'))
+
+
+@app.route('/clientes', methods=['GET','POST'])
+@login_required
+@role_required('adm_biocognitiva','administrador')
+def clientes():
+    u=get_user(); db=get_db()
+    if request.method=='POST':
+        rs=request.form.get('razao_social','').strip()
+        if not rs:
+            flash('Razão social é obrigatória.','error')
+        else:
+            db.execute(
+                '''INSERT INTO clientes_empresa (razao_social,nome_fantasia,cnpj,cidade,contato_nome,telefone,email,observacao,registered_by)
+                VALUES (?,?,?,?,?,?,?,?,?)''',
+                (rs,request.form.get('nome_fantasia','').strip(),request.form.get('cnpj','').strip(),
+                 request.form.get('cidade','').strip(),request.form.get('contato_nome','').strip(),
+                 request.form.get('telefone','').strip(),request.form.get('email','').strip(),
+                 request.form.get('observacao','').strip(),u['id']),
+            )
+            db.commit(); flash('Cliente cadastrado!','success')
+    rows=db.execute('SELECT * FROM clientes_empresa ORDER BY razao_social').fetchall(); db.close()
+    return render_template('clientes.html', user=u, clientes=rows)
+
+
+@app.route('/subcontratadas', methods=['GET','POST'])
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def subcontratadas():
+    u=get_user(); db=get_db()
+    if request.method=='POST':
+        nf=request.form.get('nome_fantasia','').strip()
+        if not nf:
+            flash('Nome fantasia é obrigatório.','error')
+        else:
+            db.execute(
+                '''INSERT INTO subcontratadas (nome_fantasia,razao_social,cnpj,contato_nome,telefone,email,observacao,registered_by)
+                VALUES (?,?,?,?,?,?,?,?)''',
+                (nf,request.form.get('razao_social','').strip(),request.form.get('cnpj','').strip(),
+                 request.form.get('contato_nome','').strip(),request.form.get('telefone','').strip(),
+                 request.form.get('email','').strip(),request.form.get('observacao','').strip(),u['id']),
+            )
+            db.commit(); flash('Subcontratada cadastrada!','success')
+    rows=db.execute('SELECT * FROM subcontratadas ORDER BY nome_fantasia').fetchall(); db.close()
+    return render_template('subcontratadas.html', user=u, subcontratadas=rows)
+
+
+@app.route('/estoque-kits')
+@login_required
+@role_required('adm_biocognitiva','administrador')
+def estoque_kits():
+    u=get_user()
+    return render_template('estoque_kits.html', user=u)
+
 
 # === ADMIN USERS ===
 @app.route('/admin/users')

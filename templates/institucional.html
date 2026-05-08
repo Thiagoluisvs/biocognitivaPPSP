@@ -1,25 +1,38 @@
 {% extends "base.html" %}
 {% block page_title %}Institucional / PPSP{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-building"></i> Documentos Institucionais</h2></div>
+<div class="page-header"><h2><i class="fas fa-building"></i> Documentos institucionais</h2>
+{% if user.role=='supervisor' %}<p class="text-muted"><i class="fas fa-eye"></i> <strong>Consulta apenas.</strong> Envio de arquivos é feito pela Biocognitiva (ADM).</p>{% endif %}
+</div>
 <div class="grid-2">
-{% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar Documento</h2></div><div class="card-body">
+{% if user.role in ('adm_biocognitiva','administrador') %}
+<div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar documento</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('institucional_upload') }}" enctype="multipart/form-data">
     <div class="form-group"><label>Categoria *</label><select name="category" class="form-select" required>
-        <option value="institucional">Institucional Geral</option><option value="ppsp">PPSP</option>
+        <option value="institucional">Institucional geral</option><option value="ppsp">PPSP</option>
         <option value="contrato">Contrato</option><option value="alvara">Alvará</option>
-        <option value="certificacao">Certificação</option><option value="representante_legal">Representante Legal</option>
+        <option value="certificacao">Certificação</option><option value="representante_legal">Representante legal</option>
         <option value="especialista">Especialista</option><option value="aparelho">Aparelho</option>
     </select></div>
     <div class="form-group"><label>Título *</label><input type="text" name="title" class="form-input" required></div>
-    <div class="form-group"><label>Arquivo *</label><input type="file" name="file" class="form-input" required></div>
+    <div class="form-group"><label>Descrição</label><input type="text" name="description" class="form-input"></div>
+    <div class="form-group"><label>Arquivo * <small>(PDF preferencial)</small></label><input type="file" name="file" class="form-input" required accept=".pdf,.doc,.docx"></div>
     <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar</button>
 </form></div></div>
 {% endif %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-folder-open"></i> Arquivos</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Categoria</th><th>Título</th><th>Arquivo</th></tr></thead><tbody>
-{% for d in docs %}<tr><td>{{ d.created_at[:10] }}</td><td><span class="badge badge-info">{{ d.category.replace('_',' ').title() }}</span></td><td>{{ d.title }}</td><td><span class="badge badge-success"><i class="fas fa-file"></i> {{ d.original_filename }}</span></td></tr>{% endfor %}
-</tbody></table></div></div>
+<div class="card" style="grid-column:1/-1;"><div class="card-header"><h2><i class="fas fa-folder-open"></i> Por categoria</h2></div><div class="card-body">
+{% for category, group in docs|sort(attribute='category')|groupby('category') %}
+<h3 style="font-size:1rem;margin:1rem 0 .5rem;border-bottom:1px solid var(--border,#ddd);padding-bottom:.25rem;">{{ category.replace('_',' ').title() }}</h3>
+<div class="table-responsive"><table class="table"><thead><tr><th>Inclusão</th><th>Título</th><th>Nome do arquivo</th><th>Consulta PDF</th></tr></thead><tbody>
+{% for d in group|sort(attribute='created_at', reverse=true) %}
+<tr>
+    <td>{{ d.created_at[:10] }}</td>
+    <td><strong>{{ d.title }}</strong>{% if d.description %}<br><small>{{ d.description }}</small>{% endif %}</td>
+    <td><code style="font-size:.85rem;">{{ d.original_filename }}</code></td>
+    <td><a href="{{ url_for('serve_document', filename=d.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="fas fa-file-pdf"></i> Abrir</a></td>
+</tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p>Nenhum documento.</p>{% endfor %}
+</div></div>
 </div>
 {% endblock %}

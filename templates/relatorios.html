@@ -1,19 +1,27 @@
 {% extends "base.html" %}
-{% block page_title %}Relatórios do Programa{% endblock %}
+{% block page_title %}Relatórios do programa{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-file-alt"></i> Relatórios do Programa</h2></div>
+<div class="page-header"><h2><i class="fas fa-file-alt"></i> Relatórios do programa</h2>
+{% if user.role=='supervisor' %}<p class="text-muted"><strong>Consulta apenas.</strong> Novos relatórios são publicados pela Biocognitiva (ADM).</p>{% endif %}
+</div>
 <div class="grid-2">
-{% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar Relatório</h2></div><div class="card-body">
+{% if user.role in ('adm_biocognitiva','administrador') %}
+<div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar relatório</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('relatorio_upload') }}" enctype="multipart/form-data">
     <div class="form-group"><label>Título *</label><input type="text" name="titulo" class="form-input" required></div>
-    <div class="form-group"><label>Arquivo (PDF) *</label><input type="file" name="file" class="form-input" required></div>
-    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar Relatório</button>
+    <div class="form-group"><label>Descrição</label><input type="text" name="descricao" class="form-input"></div>
+    <div class="form-group"><label>PDF *</label><input type="file" name="file" class="form-input" required accept=".pdf"></div>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar</button>
 </form></div></div>
 {% endif %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Relatórios Disponíveis</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Título</th><th>Arquivo</th></tr></thead><tbody>
-{% for r in relatorios %}<tr><td>{{ r.created_at[:10] }}</td><td>{{ r.titulo }}</td><td><span class="badge badge-success"><i class="fas fa-file-pdf"></i> {{ r.original_filename }}</span></td></tr>{% endfor %}
+<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Disponíveis</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr><th>Data</th><th>Título</th><th>Arquivo</th><th>Abrir</th></tr></thead><tbody>
+{% for r in relatorios %}<tr>
+    <td>{{ r.created_at[:10] }}</td>
+    <td><strong>{{ r.titulo }}</strong>{% if r.descricao %}<br><small>{{ r.descricao }}</small>{% endif %}</td>
+    <td><code style="font-size:.85rem;">{{ r.original_filename }}</code></td>
+    <td><a href="{{ url_for('serve_document', filename=r.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="fas fa-file-pdf"></i> PDF</a></td>
+</tr>{% else %}<tr><td colspan="4">Nenhum relatório.</td></tr>{% endfor %}
 </tbody></table></div></div>
 </div>
 {% endblock %}
