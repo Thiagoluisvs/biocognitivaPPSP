@@ -1,24 +1,40 @@
 {% extends "base.html" %}
 {% block page_title %}Dashboard{% endblock %}
 {% block content %}
+
+{% if data.error_msg %}
+<div class="alert alert-warning mb-2">
+    <i class="fas fa-exclamation-triangle"></i> {{ data.error_msg }}
+</div>
+{% endif %}
+
 {% if user.role == 'colaborador' %}
 <div class="stats-grid">
-    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-video"></i></div><div class="stat-info"><h3>{{ data.videos|length }}</h3><p>Vídeo Aulas</p></div></div>
-    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-clipboard-check"></i></div><div class="stat-info"><h3>{{ data.avaliacoes|length }}</h3><p>Avaliações</p></div></div>
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-video"></i></div><div class="stat-info"><h3>{{ data.videos|length if data.videos else 0 }}</h3><p>Vídeo Aulas</p></div></div>
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-clipboard-check"></i></div><div class="stat-info"><h3>{{ data.avaliacoes|length if data.avaliacoes else 0 }}</h3><p>Avaliações</p></div></div>
     <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-star"></i></div><div class="stat-info"><h3>{{ data.tentativas|length if data.tentativas else 0 }}</h3><p>Provas Realizadas</p></div></div>
 </div>
 <div class="grid-2">
     <div class="card"><div class="card-header"><h2><i class="fas fa-video"></i> Vídeo Aulas</h2></div><div class="card-body">
-        {% for v in data.videos %}
-        <div class="lesson-item"><div class="lesson-num">{{ v.ordem }}</div><div class="lesson-info"><h4>{{ v.titulo }}</h4><small><i class="fas fa-clock"></i> {{ v.duracao_minutos }} min</small></div></div>
-        {% endfor %}
-        <a href="{{ url_for('video_aulas') }}" class="btn btn-primary btn-sm mt-1"><i class="fas fa-play"></i> Assistir Aulas</a>
+        {% if data.videos %}
+            {% for v in data.videos %}
+            <div class="lesson-item"><div class="lesson-num">{{ v.ordem }}</div><div class="lesson-info"><h4>{{ v.titulo }}</h4><small><i class="fas fa-clock"></i> {{ v.duracao_minutos }} min</small></div></div>
+            {% endfor %}
+            <a href="{{ url_for('video_aulas') }}" class="btn btn-primary btn-sm mt-1"><i class="fas fa-play"></i> Assistir Aulas</a>
+        {% else %}
+            <p class="empty-state">Nenhuma aula disponível.</p>
+        {% endif %}
     </div></div>
     <div class="card"><div class="card-header"><h2><i class="fas fa-clipboard-check"></i> Avaliações</h2></div><div class="card-body">
-        {% for a in data.avaliacoes %}
-        <div class="quiz-item"><div class="quiz-info"><h4>{{ a.titulo }}</h4><small>Nota mín: {{ a.nota_minima }} | {{ a.max_tentativas }} tentativas</small></div>
-        <a href="{{ url_for('avaliacao', av_id=a.id) }}" class="btn btn-sm btn-primary">Fazer Prova</a></div>
-        {% endfor %}
+        {% if data.avaliacoes %}
+            {% for a in data.avaliacoes %}
+            <div class="quiz-item"><div class="quiz-info"><h4>{{ a.titulo }}</h4><small>Nota mín: {{ a.nota_minima }} | {{ a.max_tentativas }} tentativas</small></div>
+            <a href="{{ url_for('avaliacao', av_id=a.id) }}" class="btn btn-sm btn-primary">Fazer Prova</a></div>
+            {% endfor %}
+        {% else %}
+            <p class="empty-state">Nenhuma avaliação disponível.</p>
+        {% endif %}
+        
         {% if data.tentativas %}
         <h3 class="mt-1">Últimos Resultados</h3>
         {% for t in data.tentativas %}
@@ -31,21 +47,42 @@
 
 {% elif user.role == 'supervisor' %}
 <div class="stats-grid">
-    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_colabs }}</h3><p>Colaboradores</p></div></div>
-    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend }}</h3><p>Agendamentos</p></div></div>
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_colabs if data.total_colabs else 0 }}</h3><p>Colaboradores</p></div></div>
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend if data.total_agend else 0 }}</h3><p>Agendamentos</p></div></div>
 </div>
-<div class="card"><div class="card-header"><h2><i class="fas fa-calendar-alt"></i> Últimos Agendamentos</h2></div><div class="card-body">
-    <table class="table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Local</th><th>Exames</th><th>Status</th></tr></thead><tbody>
-    {% for a in data.agendamentos %}
-    <tr><td>{{ a.colab_name }}</td><td><span class="badge badge-info">{{ a.motivo|label_motivo_agendamento }}</span></td><td>{{ a.data_coleta }}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td><td>{% for ex in a.exames|exames_json_list %}<span class="badge badge-secondary">{{ ex|label_exame_agendamento }}</span>{% endfor %}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
-    {% endfor %}</tbody></table>
-</div></div>
 
-{% elif user.role == 'tecnico' %}
-<div class="stats-grid">
-    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><h3>{{ data.total_hoje }}</h3><p>Atendimentos Hoje</p></div></div>
+<div class="grid-1 mt-1">
+    <div class="card">
+        <div class="card-header"><h2><i class="fas fa-calendar-check"></i> Agenda de Hoje</h2></div>
+        <div class="card-body">
+            {% if data.agenda_hoje %}
+            <table class="table"><thead><tr><th>Colaborador</th><th>Horário</th><th>Local</th><th>Status</th></tr></thead><tbody>
+            {% for a in data.agenda_hoje %}
+            <tr><td>{{ a.colab_name }}</td><td>{{ a.horario_coleta }}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
+            {% endfor %}</tbody></table>
+            {% else %}<p class="empty-state">Nenhum agendamento para hoje.</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-1">
+        <div class="card-header"><h2><i class="fas fa-calendar-alt"></i> Últimos Agendamentos</h2></div>
+        <div class="card-body">
+            {% if data.agendamentos %}
+            <table class="table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Status</th></tr></thead><tbody>
+            {% for a in data.agendamentos %}
+            <tr><td>{{ a.colab_name }}</td><td><span class="badge badge-info">{{ a.motivo|label_motivo_agendamento }}</span></td><td>{{ a.data_coleta }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
+            {% endfor %}</tbody></table>
+            {% else %}<p class="empty-state">Nenhum agendamento registrado.</p>{% endif %}
+        </div>
+    </div>
 </div>
-<div class="card"><div class="card-header"><h2><i class="fas fa-calendar-day"></i> Agenda do Dia</h2></div><div class="card-body">
+
+{% elif user.role in ['tecnico', 'tecnico_biocognitiva'] %}
+<div class="stats-grid">
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><h3>{{ data.agenda_hoje|length if data.agenda_hoje else 0 }}</h3><p>Atendimentos Hoje</p></div></div>
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar-alt"></i></div><div class="stat-info"><h3>{{ data.total_agend if data.total_agend else 0 }}</h3><p>Total Geral</p></div></div>
+</div>
+<div class="card mt-1"><div class="card-header"><h2><i class="fas fa-calendar-day"></i> Agenda do Dia</h2></div><div class="card-body">
     {% if data.agenda_hoje %}
     <table class="table"><thead><tr><th>Horário</th><th>Colaborador</th><th>Exames</th><th>Local</th><th>Status</th></tr></thead><tbody>
     {% for a in data.agenda_hoje %}
@@ -54,28 +91,32 @@
     {% else %}<p class="empty-state"><i class="fas fa-calendar-check"></i> Nenhum atendimento agendado para hoje.</p>{% endif %}
 </div></div>
 
-{% elif user.role == 'adm_biocognitiva' %}
+{% elif user.role in ['adm_biocognitiva', 'administrador'] %}
 <div class="stats-grid">
-    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_colabs }}</h3><p>Colaboradores</p></div></div>
-    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend }}</h3><p>Agendamentos</p></div></div>
-    <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-flask"></i></div><div class="stat-info"><h3>{{ data.total_resultados }}</h3><p>Resultados</p></div></div>
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_colabs if data.total_colabs else 0 }}</h3><p>Colaboradores</p></div></div>
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend if data.total_agend else 0 }}</h3><p>Agendamentos</p></div></div>
+    <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-flask"></i></div><div class="stat-info"><h3>{{ data.total_resultados if data.total_resultados else 0 }}</h3><p>Resultados</p></div></div>
 </div>
-<div class="card"><div class="card-header"><h2><i class="fas fa-calendar-alt"></i> Agendamentos Recentes</h2></div><div class="card-body">
+<div class="card mt-1"><div class="card-header"><h2><i class="fas fa-calendar-alt"></i> Agendamentos Recentes</h2></div><div class="card-body">
+    {% if data.agendamentos %}
     <table class="table"><thead><tr><th>Colaborador</th><th>Data</th><th>Exames</th><th>Status</th></tr></thead><tbody>
     {% for a in data.agendamentos %}<tr><td>{{ a.colab_name }}</td><td>{{ a.data_coleta }}</td><td>{% for ex in a.exames|exames_json_list %}<span class="badge badge-secondary">{{ ex|label_exame_agendamento }}</span>{% endfor %}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>{% endfor %}
     </tbody></table>
+    {% else %}<p class="empty-state">Nenhum agendamento registrado.</p>{% endif %}
 </div></div>
 
 {% else %}
 <div class="stats-grid">
-    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_users }}</h3><p>Usuários</p></div></div>
-    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-user-tie"></i></div><div class="stat-info"><h3>{{ data.total_colabs }}</h3><p>Colaboradores</p></div></div>
-    <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend }}</h3><p>Agendamentos</p></div></div>
+    <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_users if data.total_users else 0 }}</h3><p>Usuários</p></div></div>
+    <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-user-tie"></i></div><div class="stat-info"><h3>{{ data.total_colabs if data.total_colabs else 0 }}</h3><p>Colaboradores</p></div></div>
+    <div class="stat-card stat-purple"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend if data.total_agend else 0 }}</h3><p>Agendamentos</p></div></div>
 </div>
-<div class="card"><div class="card-header"><h2><i class="fas fa-users"></i> Usuários do Sistema</h2></div><div class="card-body">
-    <table class="table"><thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th></tr></thead><tbody>
-    {% for u in data.users %}<tr><td>{{ u.name }}</td><td>{{ u.email }}</td><td><span class="badge badge-{{ u.role }}">{{ u.role.replace('_',' ').title() }}</span></td><td><span class="badge {% if u.active %}badge-success{% else %}badge-danger{% endif %}">{% if u.active %}Ativo{% else %}Inativo{% endif %}</span></td></tr>{% endfor %}
+<div class="card mt-1"><div class="card-header"><h2><i class="fas fa-users"></i> Usuários Recentes</h2></div><div class="card-body">
+    {% if data.users %}
+    <table class="table"><thead><tr><th>Nome</th><th>Perfil</th><th>Status</th></tr></thead><tbody>
+    {% for u in data.users %}<tr><td>{{ u.name }}</td><td><span class="badge badge-{{ u.role }}">{{ u.role.replace('_',' ').title() }}</span></td><td><span class="badge {% if u.active %}badge-success{% else %}badge-danger{% endif %}">{% if u.active %}Ativo{% else %}Inativo{% endif %}</span></td></tr>{% endfor %}
     </tbody></table>
+    {% else %}<p class="empty-state">Nenhum usuário cadastrado além de você.</p>{% endif %}
 </div></div>
 {% endif %}
 {% endblock %}

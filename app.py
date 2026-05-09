@@ -90,8 +90,12 @@ def role_required(*roles):
     return decorator
 
 def get_user():
-    if 'user_id' not in session: return None
-    db=get_db(); u=db.execute('SELECT * FROM users WHERE id=?',(session['user_id'],)).fetchone(); db.close()
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    db = get_db()
+    u = db.execute('SELECT * FROM users WHERE id=?', (user_id,)).fetchone()
+    db.close()
     return u
 
 
@@ -149,32 +153,46 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    u=get_user(); db=get_db(); d={}
-    if u['role']=='colaborador':
-        colab=db.execute('SELECT * FROM colaboradores WHERE email=?',(u['email'],)).fetchone()
-        d['colab']=colab
-        d['videos']=db.execute('SELECT * FROM video_aulas ORDER BY ordem').fetchall()
-        d['avaliacoes']=db.execute('SELECT * FROM avaliacoes WHERE active=1').fetchall()
-        if colab:
-            d['tentativas']=db.execute('SELECT * FROM avaliacao_tentativas WHERE colaborador_id=? ORDER BY completed_at DESC',(colab['id'],)).fetchall()
-    elif u['role']=='supervisor':
-        d['colaboradores']=db.execute('SELECT * FROM colaboradores ORDER BY name').fetchall()
-        d['agendamentos']=db.execute('SELECT a.*,c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
-        d['total_colabs']=db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
-        d['total_agend']=db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-    elif u['role']=='tecnico':
-        d['agenda_hoje']=db.execute("SELECT a.*,c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta",()).fetchall()
-        d['total_hoje']=len(d['agenda_hoje'])
-    elif u['role']=='adm_biocognitiva':
-        d['total_colabs']=db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
-        d['total_agend']=db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-        d['total_resultados']=db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
-        d['agendamentos']=db.execute('SELECT a.*,c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
-    else:
-        d['total_users']=db.execute('SELECT COUNT(*) as c FROM users').fetchone()['c']
-        d['total_colabs']=db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
-        d['total_agend']=db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-        d['users']=db.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall()
+    u = get_user()
+    if not u:
+        session.clear()
+        return redirect(url_for('login'))
+    
+    db = get_db()
+    d = {}
+    
+    try:
+        if u['role'] == 'colaborador':
+            colab = db.execute('SELECT * FROM colaboradores WHERE email=?', (u['email'],)).fetchone()
+            d['colab'] = colab
+            d['videos'] = db.execute('SELECT * FROM video_aulas ORDER BY ordem').fetchall()
+            d['avaliacoes'] = db.execute('SELECT * FROM avaliacoes WHERE active=1').fetchall()
+            if colab:
+                d['tentativas'] = db.execute('SELECT * FROM avaliacao_tentativas WHERE colaborador_id=? ORDER BY completed_at DESC', (colab['id'],)).fetchall()
+        
+        elif u['role'] == 'supervisor':
+            d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
+            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
+            d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta").fetchall()
+            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
+            
+        elif u['role'] in ['tecnico', 'tecnico_biocognitiva']:
+            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
+            d['total_resultados'] = db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
+            d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta").fetchall()
+            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
+            
+        elif u['role'] in ['adm_biocognitiva', 'administrador']:
+            d['total_users'] = db.execute('SELECT COUNT(*) as c FROM users').fetchone()['c']
+            d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
+            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
+            d['total_resultados'] = db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
+            d['users'] = db.execute('SELECT * FROM users ORDER BY created_at DESC LIMIT 5').fetchall()
+            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
+    except Exception as e:
+        print(f"Dashboard Data Fetch Error: {e}")
+        d['error_msg'] = "Alguns dados não puderam ser carregados no momento."
+
     db.close()
     return render_template('dashboard.html', user=u, data=d)
 
