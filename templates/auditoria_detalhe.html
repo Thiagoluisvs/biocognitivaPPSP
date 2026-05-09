@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Detalhes de Auditoria{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('auditoria') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-magnifying-glass"></i> Detalhes do Log de Auditoria</h2>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Informações da Operação</h3>
+    </div>
+    <div class="card-body">
+        <div class="grid-4">
+            <div>
+                <strong>ID do Log:</strong>
+                <p>#{{ log.id }}</p>
+            </div>
+            <div>
+                <strong>Ação:</strong>
+                <p>
+                    {% if log.action == 'CREATE' %}
+                        <span class="badge" style="background: #28a745;"><i class="fas fa-plus"></i> CADASTRO</span>
+                    {% elif log.action == 'UPDATE' %}
+                        <span class="badge" style="background: #ffc107; color: #000;"><i class="fas fa-edit"></i> EDIÇÃO</span>
+                    {% elif log.action == 'DELETE' %}
+                        <span class="badge" style="background: #dc3545;"><i class="fas fa-trash"></i> EXCLUSÃO</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div>
+                <strong>Entidade:</strong>
+                <p>{{ log.entity_type | title }}</p>
+            </div>
+            <div>
+                <strong>ID da Entidade:</strong>
+                <p>#{{ log.entity_id }}</p>
+            </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 24px;">
+            <div>
+                <strong>Usuário:</strong>
+                <p>{{ log.user_name }} (ID: {{ log.user_id }})</p>
+            </div>
+            <div>
+                <strong>Data/Hora:</strong>
+                <p>{{ log.created_at }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if log.action == 'UPDATE' and log.changes %}
+<div class="card" style="margin-top: 24px;">
+    <div class="card-header">
+        <h3>Resumo das Mudanças</h3>
+    </div>
+    <div class="card-body">
+        <p style="font-family: monospace; white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">{{ log.changes }}</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid-2" style="margin-top: 24px; gap: 24px;">
+    {% if old_values %}
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-history"></i> Valores Anteriores</h3>
+        </div>
+        <div class="card-body">
+            {% if old_values %}
+                <table style="width: 100%; font-size: 12px;">
+                    {% for key, value in old_values.items() %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px 4px; font-weight: bold; width: 40%;">{{ key }}</td>
+                        <td style="padding: 8px 4px;">
+                            {% if value %}
+                                <code style="background: #f0f0f0; padding: 2px 4px; border-radius: 2px;">{{ value }}</code>
+                            {% else %}
+                                <span style="color: #ccc;">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p style="color: #999;">Sem dados anteriores (registro criado)</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if new_values %}
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-check-circle"></i> Valores Novos</h3>
+        </div>
+        <div class="card-body">
+            {% if new_values %}
+                <table style="width: 100%; font-size: 12px;">
+                    {% for key, value in new_values.items() %}
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px 4px; font-weight: bold; width: 40%;">{{ key }}</td>
+                        <td style="padding: 8px 4px;">
+                            {% if value %}
+                                <code style="background: #f0f0f0; padding: 2px 4px; border-radius: 2px;">{{ value }}</code>
+                            {% else %}
+                                <span style="color: #ccc;">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p style="color: #999;">Sem dados novos (registro deletado)</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+        color: white;
+    }
+    
+    .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+    }
+    
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+    
+    code {
+        font-family: 'Courier New', monospace;
+    }
+</style>
+{% endblock %}

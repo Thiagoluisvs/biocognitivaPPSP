@@ -33,6 +33,7 @@
                     <th>Função</th>
                     <th>Empresa</th>
                     <th>Status</th>
+                    <th>Cadastro</th>
                     <th class="actions-cell">Ações</th>
                 </tr>
             </thead>
@@ -55,6 +56,10 @@
                     <td><span class="tag tag-funcao">{{ c.funcao }}</span></td>
                     <td>{{ c.empresa }}</td>
                     <td><span class="badge badge-{{ c.status }}">{{ c.status.title() }}</span></td>
+                    <td>
+                        <small style="color: #666;">{{ c.created_at[:10] }}</small><br>
+                        <small style="color: #999;">{{ c.created_at[11:16] }}</small>
+                    </td>
                     <td class="actions-cell">
                         <div class="actions-group">
                             <a href="{{ url_for('colaborador_editar', id=c.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
@@ -65,7 +70,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="empty-state">
+                    <td colspan="8" class="empty-state">
                         <i class="fas fa-users-slash"></i>
                         <p>Nenhum colaborador encontrado.</p>
                     </td>

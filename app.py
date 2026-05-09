@@ -98,6 +98,28 @@ def get_user():
     db.close()
     return u
 
+def log_audit(user_id, action, entity_type, entity_id, old_values=None, new_values=None, changes=None):
+    """Registra operações de auditoria no banco de dados"""
+    db = get_db()
+    db.execute('''INSERT INTO audit_log (user_id, action, entity_type, entity_id, old_values, new_values, changes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)''',
+        (user_id, action, entity_type, entity_id, 
+         json.dumps(old_values or {}), 
+         json.dumps(new_values or {}),
+         changes or ''))
+    db.commit()
+    db.close()
+
+def get_field_changes(old_dict, new_dict):
+    """Retorna resumo das mudanças entre dois dicionários"""
+    changes = []
+    for key in set(list((old_dict or {}).keys()) + list((new_dict or {}).keys())):
+        old_val = (old_dict or {}).get(key, '')
+        new_val = (new_dict or {}).get(key, '')
+        if old_val != new_val:
+            changes.append(f"{key}: '{old_val}' → '{new_val}'")
+    return '; '.join(changes)
+
 
 @app.route('/documentos/<path:filename>')
 @login_required
@@ -261,7 +283,16 @@ def colaborador_novo():
              request.form.get('funcao','ARSO'),request.form.get('data_admissao',''),
              tel,request.form.get('email',''),
              request.form.get('empresa',''),u['id']))
-        db.commit(); db.close(); flash('Colaborador cadastrado!','success')
+        db.commit()
+        new_colab_id = db.lastrowid
+        new_values = {
+            'name': name, 'cpf': cpf, 'endereco': request.form.get('endereco',''),
+            'funcao': request.form.get('funcao','ARSO'), 'telefone': tel,
+            'email': request.form.get('email',''), 'empresa': request.form.get('empresa','')
+        }
+        log_audit(u['id'], 'CREATE', 'colaboradores', new_colab_id, old_values={}, new_values=new_values)
+        db.close()
+        flash('Colaborador cadastrado!','success')
         return redirect(url_for('colaboradores'))
     return render_template('colaborador_form.html', user=u, colab=None)
 
@@ -286,12 +317,26 @@ def colaborador_editar(id):
         if not tel:
             flash('Telefone é obrigatório.','error')
             return render_template('colaborador_form.html', user=u, colab=colab)
-        db.execute('''UPDATE colaboradores SET name=?, cpf=?, endereco=?, funcao=?, data_admissao=?, telefone=?, email=?, empresa=?, status=?
+        
+        # Valores antigos para auditoria
+        old_values = dict(colab)
+        db.execute('''UPDATE colaboradores SET name=?, cpf=?, endereco=?, funcao=?, data_admissao=?, telefone=?, email=?, empresa=?, status=?, updated_at=CURRENT_TIMESTAMP, updated_by=?
             WHERE id=?''',
             (name, cpf, request.form.get('endereco',''),
              request.form.get('funcao',''), request.form.get('data_admissao',''),
              tel, request.form.get('email',''),
-             request.form.get('empresa',''), request.form.get('status','ativo'), id))
+             request.form.get('empresa',''), request.form.get('status','ativo'), u['id'], id))
+        
+        # Valores novos para auditoria
+        new_values = {
+            'name': name, 'cpf': cpf, 'endereco': request.form.get('endereco',''),
+            'funcao': request.form.get('funcao',''), 'telefone': tel,
+            'email': request.form.get('email',''), 'empresa': request.form.get('empresa',''),
+            'status': request.form.get('status','ativo')
+        }
+        
+        changes = get_field_changes(old_values, new_values)
+        log_audit(u['id'], 'UPDATE', 'colaboradores', id, old_values=old_values, new_values=new_values, changes=changes)
         db.commit(); db.close(); flash('Colaborador atualizado!','success')
         return redirect(url_for('colaboradores'))
     
@@ -302,9 +347,16 @@ def colaborador_editar(id):
 @login_required
 @role_required('supervisor','adm_biocognitiva','administrador')
 def colaborador_excluir(id):
+    u=get_user()
     db=get_db()
-    db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
-    db.commit(); db.close(); flash('Colaborador excluído.','success')
+    colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
+    if colab:
+        old_values = dict(colab)
+        db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
+        log_audit(u['id'], 'DELETE', 'colaboradores', id, old_values=old_values, new_values={})
+        db.commit()
+    db.close()
+    flash('Colaborador excluído.','success')
     return redirect(url_for('colaboradores'))
 
 @app.route('/colaborador/<int:id>/duplicar')
@@ -347,6 +399,69 @@ def bulk_action(action):
         
     db.commit(); db.close()
     return redirect(request.referrer or url_for('colaboradores'))
+
+# === AUDITORIA ===
+@app.route('/auditoria')
+@login_required
+@role_required('adm_biocognitiva','administrador')
+def auditoria():
+    u=get_user(); db=get_db()
+    
+    # Filtros
+    entity_type = request.args.get('entity_type', 'colaboradores')
+    action = request.args.get('action', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset = (page - 1) * per_page
+    
+    # Query base
+    query = 'SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE 1=1'
+    params = []
+    
+    if entity_type:
+        query += ' AND a.entity_type=?'
+        params.append(entity_type)
+    
+    if action:
+        query += ' AND a.action=?'
+        params.append(action)
+    
+    # Total registros
+    count = db.execute(query.replace('SELECT a.*', 'SELECT COUNT(*) as c') + ' LIMIT 1', params).fetchone()['c']
+    
+    # Registros da página
+    query += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?'
+    params.extend([per_page, offset])
+    
+    logs = db.execute(query, params).fetchall()
+    db.close()
+    
+    total_pages = (count + per_page - 1) // per_page
+    
+    return render_template('auditoria.html', user=u, logs=logs, page=page, total_pages=total_pages,
+                         entity_type=entity_type, action=action, count=count)
+
+@app.route('/auditoria/detalhe/<int:log_id>')
+@login_required
+@role_required('adm_biocognitiva','administrador')
+def auditoria_detalhe(log_id):
+    u=get_user(); db=get_db()
+    log = db.execute('SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE a.id=?', (log_id,)).fetchone()
+    db.close()
+    
+    if not log:
+        flash('Log não encontrado.','error')
+        return redirect(url_for('auditoria'))
+    
+    # Parse JSON
+    try:
+        old_values = json.loads(log['old_values']) if log['old_values'] else {}
+        new_values = json.loads(log['new_values']) if log['new_values'] else {}
+    except:
+        old_values = {}
+        new_values = {}
+    
+    return render_template('auditoria_detalhe.html', user=u, log=log, old_values=old_values, new_values=new_values)
 
 # === AGENDAMENTOS ===
 @app.route('/agendamentos')

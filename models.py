@@ -47,7 +47,8 @@ def init_db():
         data_admissao TEXT DEFAULT '', telefone TEXT DEFAULT '', email TEXT DEFAULT '',
         empresa TEXT DEFAULT '', status TEXT DEFAULT 'ativo' CHECK(status IN ('ativo','inativo','afastado')),
         registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (registered_by) REFERENCES users(id)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by INTEGER,
+        FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (registered_by) REFERENCES users(id), FOREIGN KEY (updated_by) REFERENCES users(id)
     )''')
 
     # Scheduling — release 2.0: exames em JSON (mínimo 2 de 3 tipos no app)
@@ -398,8 +399,38 @@ def migrate_schema():
         registered_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (registered_by) REFERENCES users(id)
     )''',
+        '''CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        action TEXT NOT NULL CHECK(action IN ('CREATE','UPDATE','DELETE')),
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        old_values TEXT DEFAULT '{}',
+        new_values TEXT DEFAULT '{}',
+        changes TEXT DEFAULT '',
+        ip_address TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''',
     ):
         c.execute(create)
+    
+    # Migrate colaboradores table to add updated_at and updated_by columns
+    colab_cols = _table_columns(c, 'colaboradores')
+    if colab_cols and 'updated_at' not in colab_cols:
+        try:
+            c.execute('ALTER TABLE colaboradores ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+    
+    if colab_cols and 'updated_by' not in colab_cols:
+        try:
+            c.execute('ALTER TABLE colaboradores ADD COLUMN updated_by INTEGER REFERENCES users(id)')
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+    
     conn.commit()
     conn.close()
 
