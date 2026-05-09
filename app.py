@@ -242,14 +242,22 @@ def colaboradores():
 def colaborador_novo():
     u=get_user()
     if request.method=='POST':
+        name=(request.form.get('name') or '').strip()
+        cpf=(request.form.get('cpf') or '').strip()
         tel=(request.form.get('telefone') or '').strip()
+        if not name:
+            flash('Nome é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=None)
+        if not cpf:
+            flash('CPF é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=None)
         if not tel:
             flash('Telefone é obrigatório.','error')
             return render_template('colaborador_form.html', user=u, colab=None)
         db=get_db()
         db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
             VALUES (?,?,?,?,?,?,?,?,?)''',
-            (request.form['name'],request.form['cpf'],request.form.get('endereco',''),
+            (name,cpf,request.form.get('endereco',''),
              request.form.get('funcao','ARSO'),request.form.get('data_admissao',''),
              tel,request.form.get('email',''),
              request.form.get('empresa',''),u['id']))
@@ -266,11 +274,23 @@ def colaborador_editar(id):
     if not colab: db.close(); flash('Colaborador não encontrado.','error'); return redirect(url_for('colaboradores'))
     
     if request.method=='POST':
+        name=(request.form.get('name') or '').strip()
+        cpf=(request.form.get('cpf') or '').strip()
+        tel=(request.form.get('telefone') or '').strip()
+        if not name:
+            flash('Nome é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=colab)
+        if not cpf:
+            flash('CPF é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=colab)
+        if not tel:
+            flash('Telefone é obrigatório.','error')
+            return render_template('colaborador_form.html', user=u, colab=colab)
         db.execute('''UPDATE colaboradores SET name=?, cpf=?, endereco=?, funcao=?, data_admissao=?, telefone=?, email=?, empresa=?, status=?
             WHERE id=?''',
-            (request.form['name'], request.form['cpf'], request.form.get('endereco',''),
+            (name, cpf, request.form.get('endereco',''),
              request.form.get('funcao',''), request.form.get('data_admissao',''),
-             request.form.get('telefone',''), request.form.get('email',''),
+             tel, request.form.get('email',''),
              request.form.get('empresa',''), request.form.get('status','ativo'), id))
         db.commit(); db.close(); flash('Colaborador atualizado!','success')
         return redirect(url_for('colaboradores'))
