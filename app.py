@@ -277,14 +277,14 @@ def colaborador_novo():
             flash('Telefone é obrigatório.','error')
             return render_template('colaborador_form.html', user=u, colab=None)
         db=get_db()
-        db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
+        cursor = db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
             VALUES (?,?,?,?,?,?,?,?,?)''',
             (name,cpf,request.form.get('endereco',''),
              request.form.get('funcao','ARSO'),request.form.get('data_admissao',''),
              tel,request.form.get('email',''),
              request.form.get('empresa',''),u['id']))
         db.commit()
-        new_colab_id = db.lastrowid
+        new_colab_id = cursor.lastrowid
         new_values = {
             'name': name, 'cpf': cpf, 'endereco': request.form.get('endereco',''),
             'funcao': request.form.get('funcao','ARSO'), 'telefone': tel,
@@ -408,7 +408,7 @@ def auditoria():
     u=get_user(); db=get_db()
     
     # Filtros
-    entity_type = request.args.get('entity_type', 'colaboradores')
+    entity_type = request.args.get('entity_type', '')
     action = request.args.get('action', '')
     page = request.args.get('page', 1, type=int)
     per_page = 50
@@ -416,18 +416,21 @@ def auditoria():
     
     # Query base
     query = 'SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE 1=1'
+    count_query = 'SELECT COUNT(*) as c FROM audit_log a JOIN users u ON a.user_id=u.id WHERE 1=1'
     params = []
     
     if entity_type:
         query += ' AND a.entity_type=?'
+        count_query += ' AND a.entity_type=?'
         params.append(entity_type)
     
     if action:
         query += ' AND a.action=?'
+        count_query += ' AND a.action=?'
         params.append(action)
     
     # Total registros
-    count = db.execute(query.replace('SELECT a.*', 'SELECT COUNT(*) as c') + ' LIMIT 1', params).fetchone()['c']
+    count = db.execute(count_query, params).fetchone()['c']
     
     # Registros da página
     query += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?'
