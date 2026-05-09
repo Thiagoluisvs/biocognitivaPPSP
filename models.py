@@ -266,6 +266,13 @@ def init_db():
     for k, v, d in defaults:
         c.execute('INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)', (k, v, d))
 
+    # Seed default admin if no users exist
+    if not c.execute('SELECT id FROM users LIMIT 1').fetchone():
+        c.execute(
+            'INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, ?)',
+            ('Administrador Geral', 'admin@biocognitiva.com.br', generate_password_hash('admin123', method='pbkdf2:sha256'), 'administrador', 1)
+        )
+
     conn.commit()
     conn.close()
     migrate_schema()
