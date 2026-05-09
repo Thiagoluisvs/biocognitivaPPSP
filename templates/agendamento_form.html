@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Editar Agendamento{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('agendamentos') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-calendar-check"></i> Editar Agendamento</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="form-group">
+                <label><i class="fas fa-user"></i> Colaborador *</label>
+                <select name="colaborador_id" class="form-select" required>
+                    {% for c in colaboradores %}
+                    <option value="{{ c.id }}" {{ 'selected' if agend.colaborador_id == c.id else '' }}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-info-circle"></i> Motivo *</label>
+                <select name="motivo" class="form-select" required>
+                    {% for key, label in motivos_agendamento.items() %}
+                    <option value="{{ key }}" {{ 'selected' if agend.motivo == key else '' }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-day"></i> Data da coleta *</label>
+                    <input type="date" name="data_coleta" class="form-input" value="{{ agend.data_coleta }}" required>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-clock"></i> Horário *</label>
+                    <input type="time" name="horario_coleta" class="form-input" value="{{ agend.horario_coleta }}" required>
+                </div>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-map-marker-alt"></i> Local *</label>
+                    <select name="local_coleta" class="form-select">
+                        <option value="biocognitiva" {{ 'selected' if agend.local_coleta == 'biocognitiva' else '' }}>Biocognitiva</option>
+                        <option value="in_company" {{ 'selected' if agend.local_coleta == 'in_company' else '' }}>In company</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-tasks"></i> Status</label>
+                    <select name="status" class="form-select">
+                        <option value="agendado" {{ 'selected' if agend.status == 'agendado' else '' }}>Agendado</option>
+                        <option value="realizado" {{ 'selected' if agend.status == 'realizado' else '' }}>Realizado</option>
+                        <option value="falta" {{ 'selected' if agend.status == 'falta' else '' }}>Falta</option>
+                        <option value="cancelado" {{ 'selected' if agend.status == 'cancelado' else '' }}>Cancelado</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-flask"></i> Exames * <small>(mínimo 2)</small></label>
+                {% set current_exames = agend.exames|exames_json_list %}
+                <div style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:.75rem;padding: 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border);">
+                    {% for val, lab in tipos_exame_agendamento %}
+                    <label class="custom-checkbox" style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" name="exames" value="{{ val }}" {{ 'checked' if val in current_exames else '' }}>
+                        <span class="checkmark"></span>
+                        <span style="font-size: 0.9rem; font-weight: 500;">{{ lab }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: 32px; display: flex; gap: 12px;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar Alterações</button>
+                <a href="{{ url_for('agendamentos') }}" class="btn btn-outline">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -178,6 +178,38 @@ def dashboard():
     db.close()
     return render_template('dashboard.html', user=u, data=d)
 
+@app.route('/export/<type>')
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def export_csv(type):
+    import io, csv
+    from flask import Response
+    db = get_db()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    if type == 'colaboradores':
+        rows = db.execute('SELECT * FROM colaboradores').fetchall()
+        writer.writerow(['Nome', 'CPF', 'Função', 'Empresa', 'Status', 'Telefone', 'Email'])
+        for r in rows:
+            writer.writerow([r['name'], r['cpf'], r['funcao'], r['empresa'], r['status'], r['telefone'], r['email']])
+        filename = "colaboradores.csv"
+    elif type == 'agendamentos':
+        rows = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id').fetchall()
+        writer.writerow(['Colaborador', 'Motivo', 'Data', 'Hora', 'Local', 'Status'])
+        for r in rows:
+            writer.writerow([r['colab_name'], r['motivo'], r['data_coleta'], r['horario_coleta'], r['local_coleta'], r['status']])
+        filename = "agendamentos.csv"
+    else:
+        return abort(404)
+        
+    db.close()
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )
+
 # === COLABORADORES CRUD ===
 @app.route('/colaboradores')
 @login_required
@@ -206,6 +238,77 @@ def colaborador_novo():
         db.commit(); db.close(); flash('Colaborador cadastrado!','success')
         return redirect(url_for('colaboradores'))
     return render_template('colaborador_form.html', user=u, colab=None)
+
+@app.route('/colaborador/<int:id>/editar', methods=['GET','POST'])
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def colaborador_editar(id):
+    u=get_user(); db=get_db()
+    colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
+    if not colab: db.close(); flash('Colaborador não encontrado.','error'); return redirect(url_for('colaboradores'))
+    
+    if request.method=='POST':
+        db.execute('''UPDATE colaboradores SET name=?, cpf=?, endereco=?, funcao=?, data_admissao=?, telefone=?, email=?, empresa=?, status=?
+            WHERE id=?''',
+            (request.form['name'], request.form['cpf'], request.form.get('endereco',''),
+             request.form.get('funcao',''), request.form.get('data_admissao',''),
+             request.form.get('telefone',''), request.form.get('email',''),
+             request.form.get('empresa',''), request.form.get('status','ativo'), id))
+        db.commit(); db.close(); flash('Colaborador atualizado!','success')
+        return redirect(url_for('colaboradores'))
+    
+    db.close()
+    return render_template('colaborador_form.html', user=u, colab=colab)
+
+@app.route('/colaborador/<int:id>/excluir')
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def colaborador_excluir(id):
+    db=get_db()
+    db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
+    db.commit(); db.close(); flash('Colaborador excluído.','success')
+    return redirect(url_for('colaboradores'))
+
+@app.route('/colaborador/<int:id>/duplicar')
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def colaborador_duplicar(id):
+    db=get_db()
+    c=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
+    if c:
+        db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
+            VALUES (?,?,?,?,?,?,?,?,?)''',
+            (c['name'] + ' (Cópia)', c['cpf'], c['endereco'], c['funcao'], c['data_admissao'], c['telefone'], c['email'], c['empresa'], get_user()['id']))
+        db.commit()
+        flash('Colaborador duplicado!','success')
+    db.close()
+    return redirect(url_for('colaboradores'))
+
+@app.route('/bulk-action/<action>', methods=['POST'])
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def bulk_action(action):
+    ids = json.loads(request.form.get('ids', '[]'))
+    if not ids: flash('Nenhum item selecionado.','warning'); return redirect(request.referrer)
+    
+    db = get_db()
+    if action == 'excluir':
+        for i in ids: db.execute('DELETE FROM colaboradores WHERE id=?', (i,))
+        flash(f'{len(ids)} itens excluídos.','success')
+    elif action == 'duplicar':
+        for i in ids:
+            c = db.execute('SELECT * FROM colaboradores WHERE id=?', (i,)).fetchone()
+            if c:
+                db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
+                    VALUES (?,?,?,?,?,?,?,?,?)''',
+                    (c['name'] + ' (Cópia)', c['cpf'], c['endereco'], c['funcao'], c['data_admissao'], c['telefone'], c['email'], c['empresa'], get_user()['id']))
+        flash(f'{len(ids)} itens duplicados.','success')
+    elif action == 'editar':
+        # Placeholder for mass edit, usually opens a special form
+        flash('Edição em massa selecionada para ' + str(len(ids)) + ' itens.','info')
+        
+    db.commit(); db.close()
+    return redirect(request.referrer or url_for('colaboradores'))
 
 # === AGENDAMENTOS ===
 @app.route('/agendamentos')
@@ -238,6 +341,53 @@ def agendamento_novo():
          request.form['horario_coleta'],request.form['local_coleta'],json.dumps(exames),u['id']),
     )
     db.commit(); db.close(); flash('Agendamento criado!','success')
+    return redirect(url_for('agendamentos'))
+
+@app.route('/agendamento/<int:id>/editar', methods=['GET','POST'])
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def agendamento_editar(id):
+    u=get_user(); db=get_db()
+    agend=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
+    if not agend: db.close(); flash('Agendamento não encontrado.','error'); return redirect(url_for('agendamentos'))
+    
+    if request.method=='POST':
+        raw=request.form.getlist('exames')
+        exames=sorted({e for e in raw if e in TIPOS_EXAME_VALIDOS}, key=lambda x: _EXAME_ORDER.get(x, 99))
+        db.execute('''UPDATE agendamentos SET colaborador_id=?, motivo=?, data_coleta=?, horario_coleta=?, local_coleta=?, exames=?, status=?
+            WHERE id=?''',
+            (request.form['colaborador_id'], request.form['motivo'], request.form['data_coleta'],
+             request.form['horario_coleta'], request.form['local_coleta'], json.dumps(exames), request.form.get('status','agendado'), id))
+        db.commit(); db.close(); flash('Agendamento atualizado!','success')
+        return redirect(url_for('agendamentos'))
+    
+    colabs=db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall()
+    db.close()
+    # We can reuse agendamentos.html or a separate form. Let's use a separate form for clarity.
+    return render_template('agendamento_form.html', user=u, agend=agend, colaboradores=colabs)
+
+@app.route('/agendamento/<int:id>/excluir')
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def agendamento_excluir(id):
+    db=get_db()
+    db.execute('DELETE FROM agendamentos WHERE id=?',(id,))
+    db.commit(); db.close(); flash('Agendamento excluído.','success')
+    return redirect(url_for('agendamentos'))
+
+@app.route('/agendamento/<int:id>/duplicar')
+@login_required
+@role_required('supervisor','adm_biocognitiva','administrador')
+def agendamento_duplicar(id):
+    db=get_db()
+    a=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
+    if a:
+        db.execute('''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
+            VALUES (?,?,?,?,?,?,?)''',
+            (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], get_user()['id']))
+        db.commit()
+        flash('Agendamento duplicado!','success')
+    db.close()
     return redirect(url_for('agendamentos'))
 
 # === TREINAMENTOS ===

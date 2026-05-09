@@ -1,22 +1,72 @@
 {% extends "base.html" %}
-{% block page_title %}Novo Colaborador{% endblock %}
+{% block title %}{{ 'Editar' if colab else 'Novo' }} Colaborador{% endblock %}
 {% block content %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-user-plus"></i> Cadastrar Colaborador ARSO</h2></div><div class="card-body">
-<form method="POST">
-    <div class="grid-2">
-        <div class="form-group"><label>Nome Completo *</label><input type="text" name="name" class="form-input" required></div>
-        <div class="form-group"><label>CPF *</label><input type="text" name="cpf" class="form-input" placeholder="000.000.000-00" required></div>
+<div class="page-header">
+    <a href="{{ url_for('colaboradores') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-user-{{ 'edit' if colab else 'plus' }}"></i> {{ 'Editar' if colab else 'Cadastrar' }} Colaborador ARSO</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Nome Completo *</label>
+                    <input type="text" name="name" class="form-input" value="{{ colab.name if colab else '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-id-card"></i> CPF *</label>
+                    <input type="text" name="cpf" class="form-input" placeholder="000.000.000-00" value="{{ colab.cpf if colab else '' }}" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-map-marker-alt"></i> Endereço</label>
+                <input type="text" name="endereco" class="form-input" value="{{ colab.endereco if colab else '' }}">
+            </div>
+            
+            <div class="grid-3">
+                <div class="form-group">
+                    <label><i class="fas fa-briefcase"></i> Função</label>
+                    <input type="text" name="funcao" class="form-input" value="{{ colab.funcao if colab else 'ARSO' }}">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-check"></i> Data Admissão</label>
+                    <input type="date" name="data_admissao" class="form-input" value="{{ colab.data_admissao if colab else '' }}">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-building"></i> Empresa</label>
+                    <input type="text" name="empresa" class="form-input" value="{{ colab.empresa if colab else 'NOVAVIA' }}">
+                </div>
+            </div>
+            
+            <div class="grid-3">
+                <div class="form-group">
+                    <label><i class="fas fa-phone"></i> Telefone *</label>
+                    <input type="text" name="telefone" class="form-input" required placeholder="(00) 00000-0000" value="{{ colab.telefone if colab else '' }}">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-envelope"></i> Email</label>
+                    <input type="email" name="email" class="form-input" value="{{ colab.email if colab else '' }}">
+                </div>
+                {% if colab %}
+                <div class="form-group">
+                    <label><i class="fas fa-info-circle"></i> Status</label>
+                    <select name="status" class="form-input">
+                        <option value="ativo" {{ 'selected' if colab.status == 'ativo' else '' }}>Ativo</option>
+                        <option value="inativo" {{ 'selected' if colab.status == 'inativo' else '' }}>Inativo</option>
+                        <option value="afastado" {{ 'selected' if colab.status == 'afastado' else '' }}>Afastado</option>
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-actions" style="margin-top: 24px; display: flex; gap: 12px;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ 'Salvar Alterações' if colab else 'Cadastrar' }}</button>
+                <a href="{{ url_for('colaboradores') }}" class="btn btn-outline">Cancelar</a>
+            </div>
+        </form>
     </div>
-    <div class="form-group"><label>Endereço</label><input type="text" name="endereco" class="form-input"></div>
-    <div class="grid-3">
-        <div class="form-group"><label>Função</label><input type="text" name="funcao" class="form-input" value="ARSO"></div>
-        <div class="form-group"><label>Data Admissão</label><input type="date" name="data_admissao" class="form-input"></div>
-        <div class="form-group"><label>Empresa</label><input type="text" name="empresa" class="form-input" value="NOVAVIA"></div>
-    </div>
-    <div class="grid-2">
-        <div class="form-group"><label>Telefone *</label><input type="text" name="telefone" class="form-input" required placeholder="(00) 00000-0000"></div>
-        <div class="form-group"><label>Email</label><input type="email" name="email" class="form-input"></div>
-    </div>
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Cadastrar</button>
-</form></div></div>
+</div>
+{% endblock %}
 {% endblock %}
