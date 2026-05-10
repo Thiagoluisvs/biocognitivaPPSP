@@ -1,17 +1,149 @@
 {% extends "base.html" %}
 {% block page_title %}Gerenciar Usuários{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-users-cog"></i> Gerenciar Usuários do Sistema</h2></div>
-<div class="card"><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-{% for u in users %}
-<tr><td>{{ u.name }}</td><td>{{ u.email }}</td><td><span class="badge badge-{{ u.role }}">{{ u.role.replace('_',' ').title() }}</span></td>
-<td><span class="badge {% if u.active %}badge-success{% else %}badge-danger{% endif %}">{% if u.active %}Ativo{% else %}Inativo{% endif %}</span></td>
-<td>
-    {% if u.id != session.user_id %}
-    <form method="POST" action="{{ url_for('toggle_user', uid=u.id) }}" style="display:inline"><button type="submit" class="btn btn-sm {% if u.active %}btn-danger{% else %}btn-success{% endif %}">{% if u.active %}Desativar{% else %}Ativar{% endif %}</button></form>
+<div class="page-header">
+    <div class="header-title">
+        <div>
+            <h2><i class="fas fa-users-cog"></i> Gerenciar Usuários</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">Administração de perfis, acessos e status dos usuários do sistema.</p>
+        </div>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('create_user') }}" class="btn btn-primary shadow-sm">
+            <i class="fas fa-plus-circle"></i> Novo Usuário
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-list"></i> Lista de Usuários</h2>
+        <div id="batch-actions" style="display: none;">
+            <button type="submit" form="batch-delete-form" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja deletar os usuários selecionados?')">
+                <i class="fas fa-trash-alt"></i> Excluir Selecionados
+            </button>
+        </div>
+    </div>
+    <div class="card-body" style="padding: 0;">
+        <form id="batch-delete-form" method="POST" action="{{ url_for('delete_users_batch') }}">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-cell">
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="select-all">
+                                <span class="checkmark"></span>
+                            </label>
+                        </th>
+                        <th>Usuário</th>
+                        <th>Contato</th>
+                        <th>Perfil</th>
+                        <th>Status</th>
+                        <th class="actions-cell">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in users %}
+                <tr>
+                    <td class="checkbox-cell">
+                        {% if u.id != session.user_id %}
+                        <label class="custom-checkbox">
+                            <input type="checkbox" name="user_ids" value="{{ u.id }}" class="user-checkbox">
+                            <span class="checkmark"></span>
+                        </label>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="user-meta">
+                            <span class="user-name-bold">{{ u.name }}</span>
+                            <span class="user-sub">ID: #{{ u.id }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="user-meta">
+                            <span>{{ u.email }}</span>
+                            <span class="user-sub">{{ u.phone or 'Sem telefone' }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ u.role }}">
+                            {{ u.role.replace('_',' ').title() }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if u.active %}
+                        <span class="badge badge-success">
+                            <i class="fas fa-check-circle"></i> Ativo
+                        </span>
+                        {% else %}
+                        <span class="badge badge-danger">
+                            <i class="fas fa-times-circle"></i> Inativo
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="actions-cell">
+                        <div class="actions-group">
+                            <a href="{{ url_for('edit_user', uid=u.id) }}" class="btn-icon edit" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            
+                            {% if u.id != session.user_id %}
+                            <form method="POST" action="{{ url_for('toggle_user', uid=u.id) }}" style="display:inline">
+                                <button type="submit" class="btn-icon" title="{% if u.active %}Desativar{% else %}Ativar{% endif %}">
+                                    <i class="fas {% if u.active %}fa-user-slash text-warning{% else %}fa-user-check text-success{% endif %}"></i>
+                                </button>
+                            </form>
+                            
+                            <form method="POST" action="{{ url_for('delete_user', uid=u.id) }}" style="display:inline" onsubmit="return confirm('Tem certeza que deseja deletar este usuário?')">
+                                <button type="submit" class="btn-icon delete" title="Excluir">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </form>
+    </div>
+    {% if not users %}
+    <div class="empty-state">
+        <i class="fas fa-users"></i>
+        <p>Nenhum usuário encontrado</p>
+    </div>
     {% endif %}
-</td></tr>
-{% endfor %}
-</tbody></table></div></div>
+</div>
+
+<style>
+    /* Role specific badge colors if not in CSS */
+    .badge-supervisor { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .badge-tecnico { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+    .badge-adm_biocognitiva { background: rgba(236, 72, 153, 0.1); color: #ec4899; }
+    .badge-administrador { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+    .badge-colaborador { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
+</style>
+
+<script>
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.user-checkbox');
+    const batchActions = document.getElementById('batch-actions');
+
+    function updateBatchActions() {
+        const checkedCount = document.querySelectorAll('.user-checkbox:checked').length;
+        batchActions.style.display = checkedCount > 0 ? 'block' : 'none';
+    }
+
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => {
+            cb.checked = this.checked;
+        });
+        updateBatchActions();
+    });
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateBatchActions);
+    });
+</script>
 {% endblock %}

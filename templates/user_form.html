@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block page_title %}{% if action == 'edit' %}Editar Usuário{% else %}Criar Usuário{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="header-title">
+        <div>
+            <h2><i class="fas {% if action == 'edit' %}fa-user-edit{% else %}fa-user-plus{% endif %}"></i> {% if action == 'edit' %}Editar Usuário{% else %}Novo Usuário{% endif %}</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">Preencha as informações do usuário abaixo. Campos com * são obrigatórios.</p>
+        </div>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('admin_users') }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+    <div class="card-header">
+        <h2><i class="fas fa-id-card"></i> Dados do Usuário</h2>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="name"><i class="fas fa-user"></i> Nome Completo *</label>
+                    <input type="text" id="name" name="name" value="{{ target_user.name if target_user else '' }}" required placeholder="Ex: João Silva">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email"><i class="fas fa-envelope"></i> E-mail *</label>
+                    <input type="email" id="email" name="email" value="{{ target_user.email if target_user else '' }}" required placeholder="exemplo@biocognitiva.com.br">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password"><i class="fas fa-lock"></i> Senha {% if action == 'edit' %}(Vazio para manter){% else %}*{% endif %}</label>
+                    <div style="position: relative;">
+                        <input type="password" id="password" name="password" {% if action != 'edit' %}required{% endif %} placeholder="••••••••">
+                        <button type="button" onclick="togglePassword()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer;">
+                            <i class="fas fa-eye" id="pass-icon"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="role"><i class="fas fa-user-tag"></i> Perfil de Acesso *</label>
+                    <select name="role" id="role" required style="width: 100%; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text-primary); font-family: inherit;">
+                        <option value="colaborador" {% if target_user and target_user.role == 'colaborador' %}selected{% endif %}>Colaborador</option>
+                        <option value="supervisor" {% if target_user and target_user.role == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                        <option value="tecnico" {% if target_user and target_user.role == 'tecnico' %}selected{% endif %}>Técnico Biocognitiva</option>
+                        <option value="adm_biocognitiva" {% if target_user and target_user.role == 'adm_biocognitiva' %}selected{% endif %}>ADM Biocognitiva</option>
+                        <option value="administrador" {% if target_user and target_user.role == 'administrador' %}selected{% endif %}>Administrador Geral</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="cpf"><i class="fas fa-address-card"></i> CPF</label>
+                    <input type="text" id="cpf" name="cpf" value="{{ target_user.cpf if target_user else '' }}" placeholder="000.000.000-00">
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone"><i class="fas fa-phone"></i> Telefone</label>
+                    <input type="text" id="phone" name="phone" value="{{ target_user.phone if target_user else '' }}" placeholder="(00) 00000-0000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="empresa"><i class="fas fa-building"></i> Empresa</label>
+                    <input type="text" id="empresa" name="empresa" value="{{ target_user.empresa if target_user else '' }}" placeholder="Nome da empresa">
+                </div>
+
+                <div class="form-group">
+                    <label for="funcao"><i class="fas fa-briefcase"></i> Função / Cargo</label>
+                    <input type="text" id="funcao" name="funcao" value="{{ target_user.funcao if target_user else '' }}" placeholder="Ex: Diretor">
+                </div>
+                
+                <div class="form-group">
+                    <label for="data_admissao"><i class="fas fa-calendar-day"></i> Data de Admissão</label>
+                    <input type="date" id="data_admissao" name="data_admissao" value="{{ target_user.data_admissao if target_user else '' }}">
+                </div>
+
+                <div class="form-group" style="grid-column: span 2;">
+                    <label for="address"><i class="fas fa-map-marker-alt"></i> Endereço Completo</label>
+                    <input type="text" id="address" name="address" value="{{ target_user.address if target_user else '' }}" placeholder="Rua, Número, Bairro, Cidade">
+                </div>
+
+                {% if action == 'edit' %}
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" id="active" name="active" {% if target_user and target_user.active %}checked{% endif %}>
+                        <span class="checkmark"></span>
+                    </label>
+                    <label for="active" style="margin-bottom: 0; cursor: pointer;">Usuário Ativo</label>
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-top: 32px; display: flex; justify-content: flex-end; gap: 16px;">
+                <a href="{{ url_for('admin_users') }}" class="btn btn-outline">Cancelar</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> {% if action == 'edit' %}Salvar Alterações{% else %}Criar Usuário{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function togglePassword() {
+    const pass = document.getElementById('password');
+    const icon = document.getElementById('pass-icon');
+    if (pass.type === 'password') {
+        pass.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        pass.type = 'password';
+        icon.className = 'fas fa-eye';
+    }
+}
+</script>
+{% endblock %}

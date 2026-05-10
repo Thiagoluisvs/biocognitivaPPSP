@@ -907,9 +907,173 @@ def admin_users():
 @login_required
 @role_required('administrador')
 def toggle_user(uid):
-    db=get_db(); usr=db.execute('SELECT active FROM users WHERE id=?',(uid,)).fetchone()
-    if usr: db.execute('UPDATE users SET active=? WHERE id=?',(0 if usr['active'] else 1, uid)); db.commit()
-    db.close(); return redirect(url_for('admin_users'))
+    u = get_user()
+    db=get_db()
+    usr=db.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+    if usr:
+        new_status = 0 if usr['active'] else 1
+        db.execute('UPDATE users SET active=? WHERE id=?',(new_status, uid))
+        db.commit()
+        log_audit(u['id'], 'UPDATE', 'users', uid, 
+                  old_values={'active': usr['active']}, 
+                  new_values={'active': new_status},
+                  changes=f"status: {'Ativo' if usr['active'] else 'Inativo'} → {'Ativo' if new_status else 'Inativo'}")
+    db.close()
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/user/new', methods=['GET', 'POST'])
+@login_required
+@role_required('administrador')
+def create_user():
+    u = get_user()
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        role = request.form.get('role')
+        cpf = request.form.get('cpf', '')
+        phone = request.form.get('phone', '')
+        address = request.form.get('address', '')
+        funcao = request.form.get('funcao', '')
+        data_admissao = request.form.get('data_admissao', '')
+        empresa = request.form.get('empresa', '')
+
+        if not name or not email or not password or not role:
+            flash('Todos os campos obrigatórios devem ser preenchidos.', 'danger')
+            return redirect(url_for('create_user'))
+
+        db = get_db()
+        try:
+            password_hash = generate_password_hash(password)
+            cursor = db.execute('''INSERT INTO users (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                       (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa))
+            db.commit()
+            new_id = cursor.lastrowid
+            
+            new_values = {
+                'name': name, 'email': email, 'role': role, 'cpf': cpf, 'phone': phone,
+                'address': address, 'funcao': funcao, 'data_admissao': data_admissao, 'empresa': empresa
+            }
+            log_audit(u['id'], 'CREATE', 'users', new_id, old_values={}, new_values=new_values)
+            
+            flash('Usuário criado com sucesso!', 'success')
+            return redirect(url_for('admin_users'))
+        except sqlite3.IntegrityError:
+            flash('Email já cadastrado.', 'danger')
+        finally:
+            db.close()
+    return render_template('user_form.html', user=u, action='create')
+
+@app.route('/admin/user/<int:uid>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('administrador')
+def edit_user(uid):
+    u = get_user()
+    db = get_db()
+    usr = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    
+    if not usr:
+        db.close()
+        flash('Usuário não encontrado.', 'danger')
+        return redirect(url_for('admin_users'))
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        role = request.form.get('role')
+        cpf = request.form.get('cpf', '')
+        phone = request.form.get('phone', '')
+        address = request.form.get('address', '')
+        funcao = request.form.get('funcao', '')
+        data_admissao = request.form.get('data_admissao', '')
+        empresa = request.form.get('empresa', '')
+        active = 1 if request.form.get('active') else 0
+        password = request.form.get('password')
+
+        if not name or not email or not role:
+            flash('Nome, Email e Perfil são obrigatórios.', 'danger')
+            return redirect(url_for('edit_user', uid=uid))
+
+        try:
+            old_values = dict(usr)
+            if password:
+                password_hash = generate_password_hash(password)
+                db.execute('''UPDATE users SET name=?, email=?, password_hash=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, updated_at=CURRENT_TIMESTAMP
+                              WHERE id=?''',
+                           (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa, active, uid))
+            else:
+                db.execute('''UPDATE users SET name=?, email=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, updated_at=CURRENT_TIMESTAMP
+                              WHERE id=?''',
+                           (name, email, role, cpf, phone, address, funcao, data_admissao, empresa, active, uid))
+            
+            db.commit()
+            
+            new_values = {
+                'name': name, 'email': email, 'role': role, 'cpf': cpf, 'phone': phone,
+                'address': address, 'funcao': funcao, 'data_admissao': data_admissao, 
+                'empresa': empresa, 'active': active
+            }
+            changes = get_field_changes(old_values, new_values)
+            log_audit(u['id'], 'UPDATE', 'users', uid, old_values=old_values, new_values=new_values, changes=changes)
+            
+            flash('Usuário atualizado com sucesso!', 'success')
+            return redirect(url_for('admin_users'))
+        except sqlite3.IntegrityError:
+            flash('Email já cadastrado para outro usuário.', 'danger')
+        finally:
+            db.close()
+            
+    db.close()
+    return render_template('user_form.html', user=u, action='edit', target_user=usr)
+
+@app.route('/admin/user/<int:uid>/delete', methods=['POST'])
+@login_required
+@role_required('administrador')
+def delete_user(uid):
+    u = get_user()
+    if uid == u['id']:
+        flash('Você não pode deletar seu próprio usuário.', 'danger')
+        return redirect(url_for('admin_users'))
+
+    db = get_db()
+    usr = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if usr:
+        old_values = dict(usr)
+        db.execute('DELETE FROM users WHERE id = ?', (uid,))
+        db.commit()
+        log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={})
+    db.close()
+    flash('Usuário deletado com sucesso!', 'success')
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/users/delete_batch', methods=['POST'])
+@login_required
+@role_required('administrador')
+def delete_users_batch():
+    u = get_user()
+    user_ids = request.form.getlist('user_ids')
+    if not user_ids:
+        flash('Nenhum usuário selecionado.', 'danger')
+        return redirect(url_for('admin_users'))
+
+    # Impedir deletar o próprio usuário
+    if str(u['id']) in user_ids:
+        flash('Você não pode deletar seu próprio usuário na exclusão em massa.', 'danger')
+        return redirect(url_for('admin_users'))
+
+    db = get_db()
+    for uid in user_ids:
+        usr = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        if usr:
+            old_values = dict(usr)
+            db.execute('DELETE FROM users WHERE id = ?', (uid,))
+            log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={})
+    
+    db.commit()
+    db.close()
+    flash(f'{len(user_ids)} usuário(s) deletado(s) com sucesso!', 'success')
+    return redirect(url_for('admin_users'))
 
 # === SETTINGS ===
 @app.route('/settings', methods=['GET','POST'])
@@ -929,4 +1093,4 @@ with app.app_context():
     init_db()
 
 if __name__=='__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)
