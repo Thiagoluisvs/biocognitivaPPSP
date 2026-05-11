@@ -1201,13 +1201,18 @@ def treinamento_duplicar(id):
 @role_required('supervisor', 'adm_biocognitiva', 'administrador')
 def treinamento_excluir(id):
     db = get_db()
-    row = db.execute('SELECT arquivo_gravacao FROM treinamentos WHERE id=?', (id,)).fetchone()
-    if row and row['arquivo_gravacao']:
-        _unlink_upload_doc(row['arquivo_gravacao'])
-    db.execute('DELETE FROM treinamentos WHERE id=?', (id,))
-    db.commit()
-    db.close()
-    flash('Treinamento excluído.', 'success')
+    try:
+        row = db.execute('SELECT arquivo_gravacao FROM treinamentos WHERE id=?', (id,)).fetchone()
+        if row and row['arquivo_gravacao']:
+            _unlink_upload_doc(row['arquivo_gravacao'])
+        db.execute('DELETE FROM treinamentos WHERE id=?', (id,))
+        db.commit()
+        flash('Treinamento excluído.', 'success')
+    except Exception as e:
+        db.rollback()
+        flash(f'Erro ao excluir treinamento: {e}', 'error')
+    finally:
+        db.close()
     return redirect(url_for('treinamentos'))
 
 
@@ -1290,23 +1295,35 @@ def resultado_duplicar(id):
 @role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
 def resultado_excluir(id):
     db = get_db()
-    r = db.execute(
-        'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
-        (id,),
-    ).fetchone()
-    if r:
-        for fn in (
-            r['foto_doador'],
-            r['foto_bafometro'],
-            r['foto_termo_consentimento'],
-            r['foto_documento'],
-            r['arquivo_resultado'],
-        ):
-            _unlink_upload_doc(fn or '')
-    db.execute('DELETE FROM resultados_exames WHERE id=?', (id,))
-    db.commit()
-    db.close()
-    flash('Resultado excluído.', 'success')
+    try:
+        r = db.execute(
+            'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
+            (id,),
+        ).fetchone()
+        if r:
+            for fn in (
+                r['foto_doador'],
+                r['foto_bafometro'],
+                r['foto_termo_consentimento'],
+                r['foto_documento'],
+                r['arquivo_resultado'],
+            ):
+                _unlink_upload_doc(fn or '')
+            
+            # Cleanup references
+            db.execute('UPDATE controle_positivo SET resultado_id=NULL WHERE resultado_id=?', (id,))
+            db.execute('UPDATE rastreabilidade SET resultado_id=NULL WHERE resultado_id=?', (id,))
+            
+            db.execute('DELETE FROM resultados_exames WHERE id=?', (id,))
+            db.commit()
+            flash('Resultado excluído.', 'success')
+        else:
+            flash('Resultado não encontrado.', 'error')
+    except Exception as e:
+        db.rollback()
+        flash(f'Erro ao excluir resultado: {e}', 'error')
+    finally:
+        db.close()
     return redirect(url_for('resultados'))
 
 
