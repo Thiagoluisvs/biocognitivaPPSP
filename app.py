@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
-import os, json, random
+import os, json, random, sqlite3
 from datetime import datetime
 from models import get_db, init_db, seed_demo_data
 
@@ -121,17 +121,25 @@ def _local_debug_institucional_session():
         session['name'] = row['name']
         session['role'] = row['role']
 
-def log_audit(user_id, action, entity_type, entity_id, old_values=None, new_values=None, changes=None):
+def log_audit(user_id, action, entity_type, entity_id, old_values=None, new_values=None, changes=None, db=None):
     """Registra operações de auditoria no banco de dados"""
-    db = get_db()
-    db.execute('''INSERT INTO audit_log (user_id, action, entity_type, entity_id, old_values, new_values, changes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (user_id, action, entity_type, entity_id, 
-         json.dumps(old_values or {}), 
-         json.dumps(new_values or {}),
-         changes or ''))
-    db.commit()
-    db.close()
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+    
+    try:
+        db.execute('''INSERT INTO audit_log (user_id, action, entity_type, entity_id, old_values, new_values, changes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (user_id, action, entity_type, entity_id, 
+             json.dumps(old_values or {}), 
+             json.dumps(new_values or {}),
+             changes or ''))
+        if close_db:
+            db.commit()
+    finally:
+        if close_db:
+            db.close()
 
 def get_field_changes(old_dict, new_dict):
     """Retorna resumo das mudanças entre dois dicionários"""
@@ -311,14 +319,14 @@ def colaborador_novo():
              request.form.get('funcao','ARSO'),request.form.get('data_admissao',''),
              tel,request.form.get('email',''),
              request.form.get('empresa',''),u['id']))
-        db.commit()
         new_colab_id = cursor.lastrowid
         new_values = {
             'name': name, 'cpf': cpf, 'endereco': request.form.get('endereco',''),
             'funcao': request.form.get('funcao','ARSO'), 'telefone': tel,
             'email': request.form.get('email',''), 'empresa': request.form.get('empresa','')
         }
-        log_audit(u['id'], 'CREATE', 'colaboradores', new_colab_id, old_values={}, new_values=new_values)
+        log_audit(u['id'], 'CREATE', 'colaboradores', new_colab_id, old_values={}, new_values=new_values, db=db)
+        db.commit()
         db.close()
         flash('Colaborador cadastrado!','success')
         return redirect(url_for('colaboradores'))
@@ -362,9 +370,8 @@ def colaborador_editar(id):
             'email': request.form.get('email',''), 'empresa': request.form.get('empresa',''),
             'status': request.form.get('status','ativo')
         }
-        
         changes = get_field_changes(old_values, new_values)
-        log_audit(u['id'], 'UPDATE', 'colaboradores', id, old_values=old_values, new_values=new_values, changes=changes)
+        log_audit(u['id'], 'UPDATE', 'colaboradores', id, old_values=old_values, new_values=new_values, changes=changes, db=db)
         db.commit(); db.close(); flash('Colaborador atualizado!','success')
         return redirect(url_for('colaboradores'))
     
@@ -383,7 +390,7 @@ def colaborador_excluir(id):
             old_values = dict(colab)
             _delete_colaborador_dependencies(db, id)
             db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
-            log_audit(u['id'], 'DELETE', 'colaboradores', id, old_values=old_values, new_values={})
+            log_audit(u['id'], 'DELETE', 'colaboradores', id, old_values=old_values, new_values={}, db=db)
             db.commit()
             flash('Colaborador e dados vinculados excluídos com sucesso.','success')
         else:
@@ -1885,7 +1892,8 @@ def toggle_user(uid):
         log_audit(u['id'], 'UPDATE', 'users', uid, 
                   old_values={'active': usr['active']}, 
                   new_values={'active': new_status},
-                  changes=f"status: {'Ativo' if usr['active'] else 'Inativo'} → {'Ativo' if new_status else 'Inativo'}")
+                  changes=f"status: {'Ativo' if usr['active'] else 'Inativo'} → {'Ativo' if new_status else 'Inativo'}",
+                  db=db)
     db.close()
     return redirect(url_for('admin_users'))
 
@@ -1923,7 +1931,7 @@ def create_user():
                 'name': name, 'email': email, 'role': role, 'cpf': cpf, 'phone': phone,
                 'address': address, 'funcao': funcao, 'data_admissao': data_admissao, 'empresa': empresa
             }
-            log_audit(u['id'], 'CREATE', 'users', new_id, old_values={}, new_values=new_values)
+            log_audit(u['id'], 'CREATE', 'users', new_id, old_values={}, new_values=new_values, db=db)
             
             flash('Usuário criado com sucesso!', 'success')
             return redirect(url_for('admin_users'))
@@ -1983,7 +1991,7 @@ def edit_user(uid):
                 'empresa': empresa, 'active': active
             }
             changes = get_field_changes(old_values, new_values)
-            log_audit(u['id'], 'UPDATE', 'users', uid, old_values=old_values, new_values=new_values, changes=changes)
+            log_audit(u['id'], 'UPDATE', 'users', uid, old_values=old_values, new_values=new_values, changes=changes, db=db)
             
             flash('Usuário atualizado com sucesso!', 'success')
             return redirect(url_for('admin_users'))
@@ -2009,8 +2017,8 @@ def delete_user(uid):
     if usr:
         old_values = dict(usr)
         db.execute('DELETE FROM users WHERE id = ?', (uid,))
+        log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={}, db=db)
         db.commit()
-        log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={})
     db.close()
     flash('Usuário deletado com sucesso!', 'success')
     return redirect(url_for('admin_users'))
@@ -2036,7 +2044,7 @@ def delete_users_batch():
         if usr:
             old_values = dict(usr)
             db.execute('DELETE FROM users WHERE id = ?', (uid,))
-            log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={})
+            log_audit(u['id'], 'DELETE', 'users', uid, old_values=old_values, new_values={}, db=db)
     
     db.commit()
     db.close()
