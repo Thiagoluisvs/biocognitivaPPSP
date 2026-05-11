@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block page_title %}Editar sorteio{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('sorteio') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-random"></i> Editar sorteio</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Título / motivo *</label><input type="text" name="titulo" class="form-input" value="{{ sorteio.titulo }}" required></div>
+    <div class="form-group"><label>Quantidade sorteada</label><input type="number" name="quantidade" class="form-input" min="1" value="{{ sorteio.quantidade }}" required></div>
+    <p class="text-muted">A lista de colaboradores sorteados não é alterada aqui; duplique o registro para refazer sorteio com novos nomes.</p>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('sorteio') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

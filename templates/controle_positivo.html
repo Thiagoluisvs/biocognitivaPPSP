@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block page_title %}Eventos impeditivos{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-ban"></i> Eventos impeditivos</h2><p class="text-muted">Positividade de amostra ou agendamentos de avaliação psicológica / médico revisor.</p></div>
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-ban"></i> Eventos impeditivos</h2>
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>
+    </div>
+</div>
+<p class="text-muted" style="margin-bottom:1rem;">Positividade de amostra ou agendamentos de avaliação psicológica / médico revisor.</p>
 <div class="grid-2">
 <div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('controle_positivo_novo') }}" enctype="multipart/form-data" id="frm">
@@ -22,15 +28,32 @@
     <button type="submit" class="btn btn-warning"><i class="fas fa-save"></i> Registrar</button>
 </form></div></div>
 <div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Registros</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Tipo</th><th>Colaborador</th><th>Agendamento</th><th>Observações</th></tr></thead><tbody>
+<table class="table"><thead><tr>
+    <th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>
+    <th>Data</th><th>Tipo</th><th>Colaborador</th><th>Agendamento</th><th>Observações</th><th class="actions-cell">Ações</th>
+</tr></thead><tbody>
 {% for cp in controles %}<tr>
+    <td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ cp.id }}" data-entity="controle_positivo"><span class="checkmark"></span></label></td>
     <td>{{ cp.created_at[:10] }}</td>
     <td>{{ (cp.tipo_evento or 'positivo_amostra')|label_evento_impeditivo }}</td>
     <td>{{ cp.colab_name }}</td>
     <td>{% if cp.data_agendamento %}{{ cp.data_agendamento }}{% if cp.horario_agendamento %} {{ cp.horario_agendamento }}{% endif %}{% else %}—{% endif %}</td>
     <td>{{ cp.info_amostra or cp.remessa_correio or cp.observacao or '—' }}</td>
+    <td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('controle_positivo_editar', id=cp.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="{{ url_for('controle_positivo_duplicar', id=cp.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <button type="button" onclick="confirmAction('Deseja excluir este registro?', '{{ url_for('controle_positivo_excluir', id=cp.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+    </div></td>
 </tr>{% endfor %}
 </tbody></table></div></div>
+</div>
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info"><span id="selectedCount">0</span> itens selecionados</div>
+    <div class="bulk-buttons">
+        <button type="button" onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button type="button" onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button type="button" onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
 </div>
 <script>(function(){var s=document.getElementById('tipo_evento');var la=document.getElementById('bloco_lab');var ag=document.getElementById('bloco_ag');function u(){var v=s.value;var e=v.indexOf('agendamento_')===0;if(la)la.style.display=e?'none':'block';if(ag)ag.style.display=e?'grid':'none';}if(s){s.onchange=u;u();}})();</script>
 {% endblock %}

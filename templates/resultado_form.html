@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}Editar resultado{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('resultados') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-flask"></i> Editar resultado de exame</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}" {% if resultado.colaborador_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Data da coleta *</label><input type="date" name="data_coleta" class="form-input" value="{{ resultado.data_coleta or '' }}" required></div>
+    <div class="form-group"><label>Resultado *</label><select name="resultado" class="form-select" required>
+        <option value="pendente" {% if resultado.resultado=='pendente' %}selected{% endif %}>Pendente</option>
+        <option value="negativo" {% if resultado.resultado=='negativo' %}selected{% endif %}>Negativo</option>
+        <option value="positivo" {% if resultado.resultado=='positivo' %}selected{% endif %}>Positivo</option>
+        <option value="inconclusivo" {% if resultado.resultado=='inconclusivo' %}selected{% endif %}>Inconclusivo</option>
+    </select></div>
+    <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input" value="{{ resultado.observacao or '' }}"></div>
+    <p class="text-muted" style="margin-bottom:1rem;">Substituir anexos (opcional):</p>
+    <div class="grid-2"><div class="form-group"><label>Foto doador</label><input type="file" name="foto_doador" class="form-input"></div>
+    <div class="form-group"><label>Foto bafômetro</label><input type="file" name="foto_bafometro" class="form-input"></div></div>
+    <div class="grid-2"><div class="form-group"><label>Foto termo</label><input type="file" name="foto_termo" class="form-input"></div>
+    <div class="form-group"><label>Foto documento</label><input type="file" name="foto_documento" class="form-input"></div></div>
+    <div class="form-group"><label>Arquivo resultado</label><input type="file" name="arquivo_resultado" class="form-input"></div>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('resultados') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

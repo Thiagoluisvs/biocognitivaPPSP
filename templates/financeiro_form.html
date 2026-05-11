@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block page_title %}Editar documento financeiro{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('financeiro') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-dollar-sign"></i> Editar documento</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group"><label>Tipo *</label><select name="tipo" class="form-select" required>
+        <option value="boleto" {% if doc.tipo=='boleto' %}selected{% endif %}>Boleto</option>
+        <option value="nota_fiscal" {% if doc.tipo=='nota_fiscal' %}selected{% endif %}>Nota fiscal</option>
+        <option value="tabela_precos" {% if doc.tipo=='tabela_precos' %}selected{% endif %}>Tabela de preços</option>
+        <option value="outro" {% if doc.tipo=='outro' %}selected{% endif %}>Outro</option>
+    </select></div>
+    <div class="form-group"><label>Título *</label><input type="text" name="titulo" class="form-input" value="{{ doc.titulo }}" required></div>
+    <div class="form-group"><label>Descrição</label><input type="text" name="descricao" class="form-input" value="{{ doc.descricao or '' }}"></div>
+    <div class="form-group"><label>Substituir arquivo</label><input type="file" name="file" class="form-input"></div>
+    <p class="text-muted">Arquivo atual: <a href="{{ url_for('serve_document', filename=doc.filename) }}" target="_blank" rel="noopener">{{ doc.original_filename }}</a></p>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('financeiro') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

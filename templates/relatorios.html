@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block page_title %}Relatórios do programa{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-file-alt"></i> Relatórios do programa</h2>
-{% if user.role=='supervisor' %}<p class="text-muted"><strong>Consulta apenas.</strong> Novos relatórios são publicados pela Biocognitiva (ADM).</p>{% endif %}
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-file-alt"></i> Relatórios do programa</h2>
+        {% if user.role in ('adm_biocognitiva','administrador') %}<div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>{% endif %}
+    </div>
 </div>
+{% if user.role=='supervisor' %}<p class="text-muted"><strong>Consulta apenas.</strong> Novos relatórios são publicados pela Biocognitiva (ADM).</p>{% endif %}
 <div class="grid-2">
 {% if user.role in ('adm_biocognitiva','administrador') %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar relatório</h2></div><div class="card-body">
@@ -14,14 +18,34 @@
     <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar</button>
 </form></div></div>
 {% endif %}
-<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Disponíveis</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Título</th><th>Arquivo</th><th>Abrir</th></tr></thead><tbody>
+<div class="card" style="{% if user.role not in ('adm_biocognitiva','administrador') %}grid-column:1/-1;{% endif %}"><div class="card-header"><h2><i class="fas fa-list"></i> Disponíveis</h2></div><div class="card-body table-responsive">
+<table class="table"><thead><tr>
+    {% if user.role in ('adm_biocognitiva','administrador') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
+    <th>Data</th><th>Título</th><th>Arquivo</th><th>Abrir</th>
+    {% if user.role in ('adm_biocognitiva','administrador') %}<th class="actions-cell">Ações</th>{% endif %}
+</tr></thead><tbody>
 {% for r in relatorios %}<tr>
+    {% if user.role in ('adm_biocognitiva','administrador') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ r.id }}" data-entity="relatorio"><span class="checkmark"></span></label></td>{% endif %}
     <td>{{ r.created_at[:10] }}</td>
     <td><strong>{{ r.titulo }}</strong>{% if r.descricao %}<br><small>{{ r.descricao }}</small>{% endif %}</td>
     <td><code style="font-size:.85rem;">{{ r.original_filename }}</code></td>
     <td><a href="{{ url_for('serve_document', filename=r.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="fas fa-file-pdf"></i> PDF</a></td>
-</tr>{% else %}<tr><td colspan="4">Nenhum relatório.</td></tr>{% endfor %}
+    {% if user.role in ('adm_biocognitiva','administrador') %}<td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('relatorio_editar', id=r.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="{{ url_for('relatorio_duplicar', id=r.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <button type="button" onclick="confirmAction('Deseja excluir este relatório?', '{{ url_for('relatorio_excluir', id=r.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+    </div></td>{% endif %}
+</tr>{% else %}<tr><td colspan="6" class="empty-state">Nenhum relatório.</td></tr>{% endfor %}
 </tbody></table></div></div>
 </div>
+{% if user.role in ('adm_biocognitiva','administrador') %}
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info"><span id="selectedCount">0</span> itens selecionados</div>
+    <div class="bulk-buttons">
+        <button type="button" onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button type="button" onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button type="button" onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

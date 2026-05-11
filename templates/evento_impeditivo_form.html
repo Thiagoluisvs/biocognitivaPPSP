@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block page_title %}Editar evento impeditivo{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('controle_positivo') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-ban"></i> Editar evento impeditivo</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group"><label>Tipo *</label><select name="tipo_evento" class="form-select" required>
+        <option value="positivo_amostra" {% if evento.tipo_evento=='positivo_amostra' %}selected{% endif %}>Amostra positiva / laboratorial</option>
+        <option value="agendamento_avaliacao_psicologica" {% if evento.tipo_evento=='agendamento_avaliacao_psicologica' %}selected{% endif %}>Agendamento — Avaliação psicológica</option>
+        <option value="agendamento_medico_revisor" {% if evento.tipo_evento=='agendamento_medico_revisor' %}selected{% endif %}>Agendamento — Médico revisor</option>
+    </select></div>
+    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}" {% if evento.colaborador_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="grid-2"><div class="form-group"><label>Data prevista</label><input type="date" name="data_agendamento" class="form-input" value="{{ evento.data_agendamento or '' }}"></div>
+    <div class="form-group"><label>Horário</label><input type="time" name="horario_agendamento" class="form-input" value="{{ evento.horario_agendamento or '' }}"></div></div>
+    <div class="form-group"><label>Info da amostra</label><input type="text" name="info_amostra" class="form-input" value="{{ evento.info_amostra or '' }}"></div>
+    <div class="form-group"><label>Remessa / rastreio</label><input type="text" name="remessa_correio" class="form-input" value="{{ evento.remessa_correio or '' }}"></div>
+    <div class="form-group"><label>Novo anexo</label><input type="file" name="arquivo" class="form-input"></div>
+    <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input" value="{{ evento.observacao or '' }}"></div>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('controle_positivo') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

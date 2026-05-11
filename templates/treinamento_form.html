@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block page_title %}Editar treinamento{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('treinamentos') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-chalkboard-teacher"></i> Editar treinamento</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group"><label>Título / tema *</label><input type="text" name="titulo" class="form-input" value="{{ treinamento.titulo }}" required></div>
+    <div class="form-group"><label>Colaborador</label><select name="colaborador_id" class="form-select"><option value="">— Turma / geral —</option>{% for c in colaboradores %}<option value="{{ c.id }}" {% if treinamento.colaborador_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Motivo *</label><select name="motivo" class="form-select" required><option value="admissao" {% if treinamento.motivo=='admissao' %}selected{% endif %}>Admissão</option><option value="periodico" {% if treinamento.motivo=='periodico' %}selected{% endif %}>Periódico</option></select></div>
+    <div class="form-group"><label>Modalidade</label><select name="tipo" class="form-select"><option value="in_company" {% if treinamento.tipo=='in_company' %}selected{% endif %}>In company</option><option value="online" {% if treinamento.tipo=='online' %}selected{% endif %}>Online</option><option value="presencial" {% if treinamento.tipo=='presencial' %}selected{% endif %}>Presencial</option></select></div>
+    <div class="grid-2"><div class="form-group"><label>Data *</label><input type="date" name="data_treinamento" class="form-input" value="{{ treinamento.data_treinamento or '' }}" required></div>
+    <div class="form-group"><label>Horário</label><input type="time" name="horario" class="form-input" value="{{ treinamento.horario or '' }}"></div></div>
+    <div class="form-group"><label>Status</label><select name="status" class="form-select"><option value="agendado" {% if treinamento.status=='agendado' %}selected{% endif %}>Agendado</option><option value="realizado" {% if treinamento.status=='realizado' %}selected{% endif %}>Realizado</option><option value="cancelado" {% if treinamento.status=='cancelado' %}selected{% endif %}>Cancelado</option></select></div>
+    <div class="form-group"><label>Novo material gravado <small>(opcional)</small></label><input type="file" name="arquivo_gravacao" class="form-input"></div>
+    {% if treinamento.arquivo_gravacao %}<p class="text-muted"><a href="{{ url_for('serve_document', filename=treinamento.arquivo_gravacao) }}" target="_blank" rel="noopener">Arquivo atual</a></p>{% endif %}
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('treinamentos') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

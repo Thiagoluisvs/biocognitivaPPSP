@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block page_title %}Editar serviço{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('servicos') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-concierge-bell"></i> Editar solicitação</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST" enctype="multipart/form-data">
+    <div class="form-group"><label>Tipo *</label><select name="tipo" class="form-select" required>
+        <option value="coleta_in_company" {% if servico.tipo=='coleta_in_company' %}selected{% endif %}>Coleta In Company</option>
+        <option value="treinamento_in_company" {% if servico.tipo=='treinamento_in_company' %}selected{% endif %}>Treinamento In Company</option>
+        <option value="relatorio_especifico" {% if servico.tipo=='relatorio_especifico' %}selected{% endif %}>Relatório Específico</option>
+        <option value="auditoria" {% if servico.tipo=='auditoria' %}selected{% endif %}>Auditoria</option>
+        <option value="outro" {% if servico.tipo=='outro' %}selected{% endif %}>Outro</option>
+    </select></div>
+    <div class="form-group"><label>Título *</label><input type="text" name="titulo" class="form-input" value="{{ servico.titulo }}" required></div>
+    <div class="form-group"><label>Descrição</label><textarea name="descricao" class="form-input" rows="3">{{ servico.descricao or '' }}</textarea></div>
+    <div class="form-group"><label>Status</label><select name="status" class="form-select">
+        <option value="pendente" {% if servico.status=='pendente' %}selected{% endif %}>Pendente</option>
+        <option value="em_andamento" {% if servico.status=='em_andamento' %}selected{% endif %}>Em andamento</option>
+        <option value="concluido" {% if servico.status=='concluido' %}selected{% endif %}>Concluído</option>
+        <option value="cancelado" {% if servico.status=='cancelado' %}selected{% endif %}>Cancelado</option>
+    </select></div>
+    <div class="form-group"><label>Novo anexo <small>(opcional)</small></label><input type="file" name="documento" class="form-input"></div>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('servicos') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

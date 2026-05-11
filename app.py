@@ -98,6 +98,29 @@ def get_user():
     db.close()
     return u
 
+@app.before_request
+def _local_debug_institucional_session():
+    """Em debug, acessos de localhost a /institucional* entram com o primeiro usuário ADM ativo (só para teste local)."""
+    if not app.debug or session.get('user_id'):
+        return
+    if not request.path.startswith('/institucional'):
+        return
+    host = (request.host or '').split(':')[0].lower()
+    addr = (request.environ.get('REMOTE_ADDR') or '').lower()
+    if host not in ('127.0.0.1', 'localhost') and addr not in ('127.0.0.1', '::1'):
+        return
+    db = get_db()
+    row = db.execute(
+        """SELECT id, name, role FROM users WHERE active=1
+           AND role IN ('administrador','adm_biocognitiva','supervisor','tecnico')
+           ORDER BY CASE role WHEN 'administrador' THEN 0 WHEN 'adm_biocognitiva' THEN 1 ELSE 2 END, id LIMIT 1"""
+    ).fetchone()
+    db.close()
+    if row:
+        session['user_id'] = row['id']
+        session['name'] = row['name']
+        session['role'] = row['role']
+
 def log_audit(user_id, action, entity_type, entity_id, old_values=None, new_values=None, changes=None):
     """Registra operações de auditoria no banco de dados"""
     db = get_db()
@@ -374,31 +397,254 @@ def colaborador_duplicar(id):
     db.close()
     return redirect(url_for('colaboradores'))
 
+def _unlink_upload_doc(filename):
+    if not filename:
+        return
+    base = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], 'documents'))
+    safe = secure_filename(os.path.basename(filename))
+    if not safe:
+        return
+    full = os.path.abspath(os.path.join(base, safe))
+    if full.startswith(base) and os.path.isfile(full):
+        try:
+            os.remove(full)
+        except OSError:
+            pass
+
+
+def _bulk_duplicate_entity(db, entity, eid, uid):
+    eid = int(eid)
+    if entity == 'colaborador':
+        c = db.execute('SELECT * FROM colaboradores WHERE id=?', (eid,)).fetchone()
+        if c:
+            db.execute(
+                '''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
+                VALUES (?,?,?,?,?,?,?,?,?)''',
+                (c['name'] + ' (Cópia)', c['cpf'], c['endereco'], c['funcao'], c['data_admissao'], c['telefone'], c['email'], c['empresa'], uid),
+            )
+        return
+    if entity == 'agendamento':
+        a = db.execute('SELECT * FROM agendamentos WHERE id=?', (eid,)).fetchone()
+        if a:
+            db.execute(
+                '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
+                VALUES (?,?,?,?,?,?,?)''',
+                (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], uid),
+            )
+        return
+    if entity == 'treinamento':
+        t = db.execute('SELECT * FROM treinamentos WHERE id=?', (eid,)).fetchone()
+        if t:
+            db.execute(
+                '''INSERT INTO treinamentos (colaborador_id,titulo,motivo,tipo,data_treinamento,horario,arquivo_gravacao,status,agendado_por)
+                VALUES (?,?,?,?,?,?,?,?,?)''',
+                (t['colaborador_id'], (t['titulo'] or '') + ' (Cópia)', t['motivo'], t['tipo'], t['data_treinamento'], t['horario'], t['arquivo_gravacao'], (t['status'] if t['status'] else 'agendado'), uid),
+            )
+        return
+    if entity == 'resultado':
+        r = db.execute('SELECT * FROM resultados_exames WHERE id=?', (eid,)).fetchone()
+        if r:
+            db.execute(
+                '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,resultado,observacao,
+                foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,lancado_por)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    r['colaborador_id'],
+                    r['agendamento_id'],
+                    r['data_coleta'],
+                    r['resultado'],
+                    r['observacao'],
+                    r['foto_doador'],
+                    r['foto_bafometro'],
+                    r['foto_termo_consentimento'],
+                    r['foto_documento'],
+                    r['arquivo_resultado'],
+                    uid,
+                ),
+            )
+        return
+    if entity == 'relatorio':
+        r = db.execute('SELECT * FROM relatorios WHERE id=?', (eid,)).fetchone()
+        if r:
+            db.execute(
+                'INSERT INTO relatorios (titulo,descricao,categoria,filename,original_filename,file_size,uploaded_by) VALUES (?,?,?,?,?,?,?)',
+                ((r['titulo'] or '') + ' (Cópia)', r['descricao'], r.get('categoria') or 'geral', r['filename'], r['original_filename'], r['file_size'], uid),
+            )
+        return
+    if entity == 'servico':
+        s = db.execute('SELECT * FROM servicos WHERE id=?', (eid,)).fetchone()
+        if s:
+            db.execute(
+                'INSERT INTO servicos (tipo,titulo,descricao,documento_anexo,documento_resposta,status,solicitado_por) VALUES (?,?,?,?,?,?,?)',
+                (s['tipo'], (s['titulo'] or '') + ' (Cópia)', s['descricao'], s['documento_anexo'], s.get('documento_resposta') or '', 'pendente', uid),
+            )
+        return
+    if entity == 'sorteio':
+        s = db.execute('SELECT * FROM sorteios WHERE id=?', (eid,)).fetchone()
+        if s:
+            db.execute(
+                'INSERT INTO sorteios (titulo,quantidade,colaboradores_sorteados,realizado_por) VALUES (?,?,?,?)',
+                ((s['titulo'] or '') + ' (Cópia)', s['quantidade'], s['colaboradores_sorteados'], uid),
+            )
+        return
+    if entity == 'falta':
+        f = db.execute('SELECT * FROM faltas WHERE id=?', (eid,)).fetchone()
+        if f:
+            db.execute(
+                'INSERT INTO faltas (colaborador_id,data_falta,agendamento_id,observacao,registrado_por) VALUES (?,?,?,?,?)',
+                (f['colaborador_id'], f['data_falta'], f['agendamento_id'], f['observacao'], uid),
+            )
+        return
+    if entity == 'controle_positivo':
+        cp = db.execute('SELECT * FROM controle_positivo WHERE id=?', (eid,)).fetchone()
+        if cp:
+            db.execute(
+                '''INSERT INTO controle_positivo (colaborador_id,resultado_id,tipo_evento,data_agendamento,horario_agendamento,
+                info_amostra,remessa_correio,arquivo_resultado,observacao,registrado_por) VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    cp['colaborador_id'],
+                    cp['resultado_id'],
+                    cp['tipo_evento'],
+                    cp['data_agendamento'],
+                    cp['horario_agendamento'],
+                    cp['info_amostra'],
+                    cp['remessa_correio'],
+                    cp['arquivo_resultado'],
+                    cp['observacao'],
+                    uid,
+                ),
+            )
+        return
+    if entity == 'cliente':
+        c = db.execute('SELECT * FROM clientes_empresa WHERE id=?', (eid,)).fetchone()
+        if c:
+            db.execute(
+                '''INSERT INTO clientes_empresa (razao_social,nome_fantasia,cnpj,cidade,contato_nome,telefone,email,observacao,registered_by)
+                VALUES (?,?,?,?,?,?,?,?,?)''',
+                ((c['razao_social'] or '') + ' (Cópia)', c['nome_fantasia'], c['cnpj'], c['cidade'], c['contato_nome'], c['telefone'], c['email'], c['observacao'], uid),
+            )
+        return
+    if entity == 'subcontratada':
+        s = db.execute('SELECT * FROM subcontratadas WHERE id=?', (eid,)).fetchone()
+        if s:
+            db.execute(
+                '''INSERT INTO subcontratadas (nome_fantasia,razao_social,cnpj,contato_nome,telefone,email,observacao,registered_by)
+                VALUES (?,?,?,?,?,?,?,?)''',
+                ((s['nome_fantasia'] or '') + ' (Cópia)', s['razao_social'], s['cnpj'], s['contato_nome'], s['telefone'], s['email'], s['observacao'], uid),
+            )
+        return
+    if entity == 'financeiro':
+        d = db.execute('SELECT * FROM financeiro WHERE id=?', (eid,)).fetchone()
+        if d:
+            db.execute(
+                'INSERT INTO financeiro (tipo,titulo,descricao,filename,original_filename,file_size,uploaded_by) VALUES (?,?,?,?,?,?,?)',
+                (d['tipo'], (d['titulo'] or '') + ' (Cópia)', d['descricao'], d['filename'], d['original_filename'], d['file_size'], uid),
+            )
+
+
 @app.route('/bulk-action/<action>', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
 def bulk_action(action):
+    entity = (request.form.get('entity') or 'colaborador').strip()
     ids = json.loads(request.form.get('ids', '[]'))
-    if not ids: flash('Nenhum item selecionado.','warning'); return redirect(request.referrer)
-    
+    role = session.get('role')
+    if not ids:
+        flash('Nenhum item selecionado.', 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    BULK_PERMS = {
+        'colaborador': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'agendamento': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'treinamento': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'resultado': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
+        'relatorio': ('adm_biocognitiva', 'administrador'),
+        'servico': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'sorteio': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'falta': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
+        'controle_positivo': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
+        'cliente': ('adm_biocognitiva', 'administrador'),
+        'subcontratada': ('supervisor', 'adm_biocognitiva', 'administrador'),
+        'financeiro': ('adm_biocognitiva', 'administrador'),
+    }
+    if entity not in BULK_PERMS or role not in BULK_PERMS[entity]:
+        flash('Sem permissão para esta ação em massa.', 'error')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    uid = get_user()['id']
     db = get_db()
-    if action == 'excluir':
-        for i in ids: db.execute('DELETE FROM colaboradores WHERE id=?', (i,))
-        flash(f'{len(ids)} itens excluídos.','success')
-    elif action == 'duplicar':
-        for i in ids:
-            c = db.execute('SELECT * FROM colaboradores WHERE id=?', (i,)).fetchone()
-            if c:
-                db.execute('''INSERT INTO colaboradores (name,cpf,endereco,funcao,data_admissao,telefone,email,empresa,registered_by)
-                    VALUES (?,?,?,?,?,?,?,?,?)''',
-                    (c['name'] + ' (Cópia)', c['cpf'], c['endereco'], c['funcao'], c['data_admissao'], c['telefone'], c['email'], c['empresa'], get_user()['id']))
-        flash(f'{len(ids)} itens duplicados.','success')
-    elif action == 'editar':
-        # Placeholder for mass edit, usually opens a special form
-        flash('Edição em massa selecionada para ' + str(len(ids)) + ' itens.','info')
-        
-    db.commit(); db.close()
-    return redirect(request.referrer or url_for('colaboradores'))
+    try:
+        if action == 'excluir':
+            for i in ids:
+                i = int(i)
+                if entity == 'colaborador':
+                    db.execute('DELETE FROM colaboradores WHERE id=?', (i,))
+                elif entity == 'agendamento':
+                    db.execute('UPDATE resultados_exames SET agendamento_id=NULL WHERE agendamento_id=?', (i,))
+                    db.execute('UPDATE faltas SET agendamento_id=NULL WHERE agendamento_id=?', (i,))
+                    db.execute('DELETE FROM agendamentos WHERE id=?', (i,))
+                elif entity == 'treinamento':
+                    tr = db.execute('SELECT arquivo_gravacao FROM treinamentos WHERE id=?', (i,)).fetchone()
+                    if tr and tr['arquivo_gravacao']:
+                        _unlink_upload_doc(tr['arquivo_gravacao'])
+                    db.execute('DELETE FROM treinamentos WHERE id=?', (i,))
+                elif entity == 'resultado':
+                    r = db.execute(
+                        'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
+                        (i,),
+                    ).fetchone()
+                    if r:
+                        for fn in (
+                            r['foto_doador'],
+                            r['foto_bafometro'],
+                            r['foto_termo_consentimento'],
+                            r['foto_documento'],
+                            r['arquivo_resultado'],
+                        ):
+                            _unlink_upload_doc(fn or '')
+                    db.execute('DELETE FROM resultados_exames WHERE id=?', (i,))
+                elif entity == 'relatorio':
+                    row = db.execute('SELECT filename FROM relatorios WHERE id=?', (i,)).fetchone()
+                    if row and row['filename']:
+                        _unlink_upload_doc(row['filename'])
+                    db.execute('DELETE FROM relatorios WHERE id=?', (i,))
+                elif entity == 'servico':
+                    s = db.execute('SELECT documento_anexo,documento_resposta FROM servicos WHERE id=?', (i,)).fetchone()
+                    if s:
+                        _unlink_upload_doc(s['documento_anexo'])
+                        _unlink_upload_doc(s['documento_resposta'] or '')
+                    db.execute('DELETE FROM servicos WHERE id=?', (i,))
+                elif entity == 'sorteio':
+                    db.execute('DELETE FROM sorteios WHERE id=?', (i,))
+                elif entity == 'falta':
+                    db.execute('DELETE FROM faltas WHERE id=?', (i,))
+                elif entity == 'controle_positivo':
+                    cp = db.execute('SELECT arquivo_resultado FROM controle_positivo WHERE id=?', (i,)).fetchone()
+                    if cp and cp['arquivo_resultado']:
+                        _unlink_upload_doc(cp['arquivo_resultado'])
+                    db.execute('DELETE FROM controle_positivo WHERE id=?', (i,))
+                elif entity == 'cliente':
+                    db.execute('DELETE FROM clientes_empresa WHERE id=?', (i,))
+                elif entity == 'subcontratada':
+                    db.execute('DELETE FROM subcontratadas WHERE id=?', (i,))
+                elif entity == 'financeiro':
+                    row = db.execute('SELECT filename FROM financeiro WHERE id=?', (i,)).fetchone()
+                    if row and row['filename']:
+                        _unlink_upload_doc(row['filename'])
+                    db.execute('DELETE FROM financeiro WHERE id=?', (i,))
+            flash(f'{len(ids)} itens excluídos.', 'success')
+        elif action == 'duplicar':
+            for i in ids:
+                _bulk_duplicate_entity(db, entity, i, uid)
+            flash(f'{len(ids)} itens duplicados.', 'success')
+        elif action == 'editar':
+            flash('Para editar, use o ícone de lápis na linha (edição em massa genérica não está disponível).', 'info')
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        flash(f'Erro na operação em massa: {ex}', 'error')
+    finally:
+        db.close()
+    return redirect(request.referrer or url_for('dashboard'))
 
 # === AUDITORIA ===
 @app.route('/auditoria')
@@ -598,7 +844,7 @@ def resultados():
 
 @app.route('/resultado/novo', methods=['POST'])
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador')
+@role_required('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador')
 def resultado_novo():
     u=get_user(); db=get_db()
     foto_doador=foto_baf=foto_termo=foto_doc=arq_res=''
@@ -839,6 +1085,664 @@ def controle_positivo_novo():
     )
     db.commit(); db.close(); flash('Evento impeditivo registrado!','success')
     return redirect(url_for('controle_positivo'))
+
+
+# --- Ações por linha (editar / duplicar / excluir) — mesmo padrão de colaboradores/agendamentos ---
+
+@app.route('/treinamento/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def treinamento_editar(id):
+    u = get_user()
+    db = get_db()
+    t = db.execute('SELECT * FROM treinamentos WHERE id=?', (id,)).fetchone()
+    if not t:
+        db.close()
+        flash('Treinamento não encontrado.', 'error')
+        return redirect(url_for('treinamentos'))
+    if request.method == 'POST':
+        _cid = (request.form.get('colaborador_id') or '').strip()
+        colab_id = int(_cid) if _cid.isdigit() else None
+        arq = t['arquivo_gravacao']
+        if 'arquivo_gravacao' in request.files and request.files['arquivo_gravacao'].filename:
+            f = request.files['arquivo_gravacao']
+            if allowed_file(f):
+                _unlink_upload_doc(arq or '')
+                arq, _, _ = save_upload(f, 'documents')
+            else:
+                db.close()
+                flash('Formato de arquivo não permitido.', 'error')
+                return redirect(url_for('treinamento_editar', id=id))
+        db.execute(
+            '''UPDATE treinamentos SET colaborador_id=?, titulo=?, motivo=?, tipo=?, data_treinamento=?, horario=?, arquivo_gravacao=?, status=?
+            WHERE id=?''',
+            (
+                colab_id,
+                request.form['titulo'],
+                request.form['motivo'],
+                request.form.get('tipo', 'in_company'),
+                request.form.get('data_treinamento', ''),
+                request.form.get('horario', ''),
+                arq,
+                request.form.get('status', 'agendado'),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Treinamento atualizado!', 'success')
+        return redirect(url_for('treinamentos'))
+    colabs = db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall()
+    db.close()
+    return render_template('treinamento_form.html', user=u, treinamento=t, colaboradores=colabs)
+
+
+@app.route('/treinamento/<int:id>/duplicar')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def treinamento_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'treinamento', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Treinamento duplicado!', 'success')
+    return redirect(url_for('treinamentos'))
+
+
+@app.route('/treinamento/<int:id>/excluir')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def treinamento_excluir(id):
+    db = get_db()
+    row = db.execute('SELECT arquivo_gravacao FROM treinamentos WHERE id=?', (id,)).fetchone()
+    if row and row['arquivo_gravacao']:
+        _unlink_upload_doc(row['arquivo_gravacao'])
+    db.execute('DELETE FROM treinamentos WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Treinamento excluído.', 'success')
+    return redirect(url_for('treinamentos'))
+
+
+@app.route('/resultado/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def resultado_editar(id):
+    u = get_user()
+    db = get_db()
+    r = db.execute('SELECT * FROM resultados_exames WHERE id=?', (id,)).fetchone()
+    if not r:
+        db.close()
+        flash('Resultado não encontrado.', 'error')
+        return redirect(url_for('resultados'))
+    if request.method == 'POST':
+        foto_doador = r['foto_doador']
+        foto_baf = r['foto_bafometro']
+        foto_termo = r['foto_termo_consentimento']
+        foto_doc = r['foto_documento']
+        arq_res = r['arquivo_resultado']
+        if request.files.get('foto_doador') and request.files['foto_doador'].filename:
+            _unlink_upload_doc(foto_doador or '')
+            foto_doador, _, _ = save_upload(request.files['foto_doador'], 'documents')
+        if request.files.get('foto_bafometro') and request.files['foto_bafometro'].filename:
+            _unlink_upload_doc(foto_baf or '')
+            foto_baf, _, _ = save_upload(request.files['foto_bafometro'], 'documents')
+        if request.files.get('foto_termo') and request.files['foto_termo'].filename:
+            _unlink_upload_doc(foto_termo or '')
+            foto_termo, _, _ = save_upload(request.files['foto_termo'], 'documents')
+        if request.files.get('foto_documento') and request.files['foto_documento'].filename:
+            _unlink_upload_doc(foto_doc or '')
+            foto_doc, _, _ = save_upload(request.files['foto_documento'], 'documents')
+        if request.files.get('arquivo_resultado') and request.files['arquivo_resultado'].filename:
+            _unlink_upload_doc(arq_res or '')
+            arq_res, _, _ = save_upload(request.files['arquivo_resultado'], 'documents')
+        data_coleta = (request.form.get('data_coleta') or '').strip()
+        if not data_coleta:
+            db.close()
+            flash('Data da coleta é obrigatória.', 'error')
+            return redirect(url_for('resultado_editar', id=id))
+        db.execute(
+            '''UPDATE resultados_exames SET colaborador_id=?, data_coleta=?, resultado=?, observacao=?,
+            foto_doador=?, foto_bafometro=?, foto_termo_consentimento=?, foto_documento=?, arquivo_resultado=? WHERE id=?''',
+            (
+                request.form['colaborador_id'],
+                data_coleta,
+                request.form.get('resultado', 'pendente'),
+                request.form.get('observacao', ''),
+                foto_doador,
+                foto_baf,
+                foto_termo,
+                foto_doc,
+                arq_res,
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Resultado atualizado!', 'success')
+        return redirect(url_for('resultados'))
+    colabs = db.execute('SELECT id,name FROM colaboradores').fetchall()
+    db.close()
+    return render_template('resultado_form.html', user=u, resultado=r, colaboradores=colabs)
+
+
+@app.route('/resultado/<int:id>/duplicar')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def resultado_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'resultado', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Resultado duplicado!', 'success')
+    return redirect(url_for('resultados'))
+
+
+@app.route('/resultado/<int:id>/excluir')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def resultado_excluir(id):
+    db = get_db()
+    r = db.execute(
+        'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
+        (id,),
+    ).fetchone()
+    if r:
+        for fn in (
+            r['foto_doador'],
+            r['foto_bafometro'],
+            r['foto_termo_consentimento'],
+            r['foto_documento'],
+            r['arquivo_resultado'],
+        ):
+            _unlink_upload_doc(fn or '')
+    db.execute('DELETE FROM resultados_exames WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Resultado excluído.', 'success')
+    return redirect(url_for('resultados'))
+
+
+@app.route('/relatorio/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def relatorio_editar(id):
+    u = get_user()
+    db = get_db()
+    r = db.execute('SELECT * FROM relatorios WHERE id=?', (id,)).fetchone()
+    if not r:
+        db.close()
+        flash('Relatório não encontrado.', 'error')
+        return redirect(url_for('relatorios'))
+    if request.method == 'POST':
+        db.execute(
+            'UPDATE relatorios SET titulo=?, descricao=?, categoria=? WHERE id=?',
+            (
+                request.form.get('titulo', r['titulo']),
+                request.form.get('descricao', ''),
+                request.form.get('categoria', r.get('categoria') or 'geral'),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Relatório atualizado!', 'success')
+        return redirect(url_for('relatorios'))
+    db.close()
+    return render_template('relatorio_form.html', user=u, relatorio=r)
+
+
+@app.route('/relatorio/<int:id>/duplicar')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def relatorio_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'relatorio', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Relatório duplicado!', 'success')
+    return redirect(url_for('relatorios'))
+
+
+@app.route('/relatorio/<int:id>/excluir')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def relatorio_excluir(id):
+    db = get_db()
+    row = db.execute('SELECT filename FROM relatorios WHERE id=?', (id,)).fetchone()
+    if row and row['filename']:
+        _unlink_upload_doc(row['filename'])
+    db.execute('DELETE FROM relatorios WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Relatório excluído.', 'success')
+    return redirect(url_for('relatorios'))
+
+
+@app.route('/servico/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def servico_editar(id):
+    u = get_user()
+    db = get_db()
+    s = db.execute('SELECT * FROM servicos WHERE id=?', (id,)).fetchone()
+    if not s:
+        db.close()
+        flash('Solicitação não encontrada.', 'error')
+        return redirect(url_for('servicos'))
+    if request.method == 'POST':
+        doc = s['documento_anexo']
+        if 'documento' in request.files and request.files['documento'].filename:
+            _unlink_upload_doc(doc)
+            doc, _, _ = save_upload(request.files['documento'], 'documents')
+        db.execute(
+            'UPDATE servicos SET tipo=?, titulo=?, descricao=?, documento_anexo=?, status=? WHERE id=?',
+            (
+                request.form['tipo'],
+                request.form['titulo'],
+                request.form.get('descricao', ''),
+                doc,
+                request.form.get('status', 'pendente'),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Solicitação atualizada!', 'success')
+        return redirect(url_for('servicos'))
+    db.close()
+    return render_template('servico_form.html', user=u, servico=s)
+
+
+@app.route('/servico/<int:id>/duplicar')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def servico_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'servico', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Solicitação duplicada!', 'success')
+    return redirect(url_for('servicos'))
+
+
+@app.route('/servico/<int:id>/excluir')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def servico_excluir(id):
+    db = get_db()
+    s = db.execute('SELECT documento_anexo,documento_resposta FROM servicos WHERE id=?', (id,)).fetchone()
+    if s:
+        _unlink_upload_doc(s['documento_anexo'])
+        _unlink_upload_doc(s['documento_resposta'] or '')
+    db.execute('DELETE FROM servicos WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Solicitação excluída.', 'success')
+    return redirect(url_for('servicos'))
+
+
+@app.route('/sorteio/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def sorteio_editar(id):
+    u = get_user()
+    db = get_db()
+    s = db.execute('SELECT * FROM sorteios WHERE id=?', (id,)).fetchone()
+    if not s:
+        db.close()
+        flash('Sorteio não encontrado.', 'error')
+        return redirect(url_for('sorteio'))
+    if request.method == 'POST':
+        db.execute(
+            'UPDATE sorteios SET titulo=?, quantidade=? WHERE id=?',
+            (request.form.get('titulo', s['titulo']), int(request.form.get('quantidade', s['quantidade'] or 1)), id),
+        )
+        db.commit()
+        db.close()
+        flash('Sorteio atualizado!', 'success')
+        return redirect(url_for('sorteio'))
+    db.close()
+    return render_template('sorteio_form.html', user=u, sorteio=s)
+
+
+@app.route('/sorteio/<int:id>/duplicar')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def sorteio_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'sorteio', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Sorteio duplicado!', 'success')
+    return redirect(url_for('sorteio'))
+
+
+@app.route('/sorteio/<int:id>/excluir')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def sorteio_excluir(id):
+    db = get_db()
+    db.execute('DELETE FROM sorteios WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Sorteio excluído.', 'success')
+    return redirect(url_for('sorteio'))
+
+
+@app.route('/falta/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def falta_editar(id):
+    u = get_user()
+    db = get_db()
+    f = db.execute('SELECT * FROM faltas WHERE id=?', (id,)).fetchone()
+    if not f:
+        db.close()
+        flash('Falta não encontrada.', 'error')
+        return redirect(url_for('faltas'))
+    if request.method == 'POST':
+        db.execute(
+            'UPDATE faltas SET colaborador_id=?, data_falta=?, observacao=? WHERE id=?',
+            (request.form['colaborador_id'], request.form['data_falta'], request.form.get('observacao', ''), id),
+        )
+        db.execute(
+            "UPDATE agendamentos SET status='falta' WHERE colaborador_id=? AND data_coleta=?",
+            (request.form['colaborador_id'], request.form['data_falta']),
+        )
+        db.commit()
+        db.close()
+        flash('Falta atualizada!', 'success')
+        return redirect(url_for('faltas'))
+    colabs = db.execute('SELECT id,name FROM colaboradores').fetchall()
+    db.close()
+    return render_template('falta_form.html', user=u, falta=f, colaboradores=colabs)
+
+
+@app.route('/falta/<int:id>/duplicar')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def falta_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'falta', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Falta duplicada!', 'success')
+    return redirect(url_for('faltas'))
+
+
+@app.route('/falta/<int:id>/excluir')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def falta_excluir(id):
+    db = get_db()
+    db.execute('DELETE FROM faltas WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Falta excluída.', 'success')
+    return redirect(url_for('faltas'))
+
+
+@app.route('/controle-positivo/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def controle_positivo_editar(id):
+    u = get_user()
+    db = get_db()
+    cp = db.execute('SELECT * FROM controle_positivo WHERE id=?', (id,)).fetchone()
+    if not cp:
+        db.close()
+        flash('Registro não encontrado.', 'error')
+        return redirect(url_for('controle_positivo'))
+    if request.method == 'POST':
+        tipo = request.form.get('tipo_evento', 'positivo_amostra')
+        if tipo not in TIPO_EVENTO_LABELS:
+            tipo = 'positivo_amostra'
+        arq = cp['arquivo_resultado']
+        if 'arquivo' in request.files and request.files['arquivo'].filename:
+            _unlink_upload_doc(arq)
+            arq, _, _ = save_upload(request.files['arquivo'], 'documents')
+        da = (request.form.get('data_agendamento') or '').strip()
+        ha = (request.form.get('horario_agendamento') or '').strip()
+        db.execute(
+            '''UPDATE controle_positivo SET colaborador_id=?, tipo_evento=?, data_agendamento=?, horario_agendamento=?,
+            info_amostra=?, remessa_correio=?, arquivo_resultado=?, observacao=? WHERE id=?''',
+            (
+                request.form['colaborador_id'],
+                tipo,
+                da,
+                ha,
+                request.form.get('info_amostra', ''),
+                request.form.get('remessa_correio', ''),
+                arq,
+                request.form.get('observacao', ''),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Evento atualizado!', 'success')
+        return redirect(url_for('controle_positivo'))
+    colabs = db.execute('SELECT id,name FROM colaboradores').fetchall()
+    db.close()
+    return render_template('evento_impeditivo_form.html', user=u, evento=cp, colaboradores=colabs)
+
+
+@app.route('/controle-positivo/<int:id>/duplicar')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def controle_positivo_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'controle_positivo', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Registro duplicado!', 'success')
+    return redirect(url_for('controle_positivo'))
+
+
+@app.route('/controle-positivo/<int:id>/excluir')
+@login_required
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+def controle_positivo_excluir(id):
+    db = get_db()
+    cp = db.execute('SELECT arquivo_resultado FROM controle_positivo WHERE id=?', (id,)).fetchone()
+    if cp and cp['arquivo_resultado']:
+        _unlink_upload_doc(cp['arquivo_resultado'])
+    db.execute('DELETE FROM controle_positivo WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Registro excluído.', 'success')
+    return redirect(url_for('controle_positivo'))
+
+
+@app.route('/cliente/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def cliente_editar(id):
+    u = get_user()
+    db = get_db()
+    c = db.execute('SELECT * FROM clientes_empresa WHERE id=?', (id,)).fetchone()
+    if not c:
+        db.close()
+        flash('Cliente não encontrado.', 'error')
+        return redirect(url_for('clientes'))
+    if request.method == 'POST':
+        rs = request.form.get('razao_social', '').strip()
+        if not rs:
+            db.close()
+            flash('Razão social é obrigatória.', 'error')
+            return redirect(url_for('cliente_editar', id=id))
+        db.execute(
+            '''UPDATE clientes_empresa SET razao_social=?, nome_fantasia=?, cnpj=?, cidade=?, contato_nome=?, telefone=?, email=?, observacao=?
+            WHERE id=?''',
+            (
+                rs,
+                request.form.get('nome_fantasia', '').strip(),
+                request.form.get('cnpj', '').strip(),
+                request.form.get('cidade', '').strip(),
+                request.form.get('contato_nome', '').strip(),
+                request.form.get('telefone', '').strip(),
+                request.form.get('email', '').strip(),
+                request.form.get('observacao', '').strip(),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Cliente atualizado!', 'success')
+        return redirect(url_for('clientes'))
+    db.close()
+    return render_template('cliente_form.html', user=u, cliente=c)
+
+
+@app.route('/cliente/<int:id>/duplicar')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def cliente_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'cliente', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Cliente duplicado!', 'success')
+    return redirect(url_for('clientes'))
+
+
+@app.route('/cliente/<int:id>/excluir')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def cliente_excluir(id):
+    db = get_db()
+    db.execute('DELETE FROM clientes_empresa WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Cliente excluído.', 'success')
+    return redirect(url_for('clientes'))
+
+
+@app.route('/subcontratada/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def subcontratada_editar(id):
+    u = get_user()
+    db = get_db()
+    s = db.execute('SELECT * FROM subcontratadas WHERE id=?', (id,)).fetchone()
+    if not s:
+        db.close()
+        flash('Subcontratada não encontrada.', 'error')
+        return redirect(url_for('subcontratadas'))
+    if request.method == 'POST':
+        nf = request.form.get('nome_fantasia', '').strip()
+        if not nf:
+            db.close()
+            flash('Nome fantasia é obrigatório.', 'error')
+            return redirect(url_for('subcontratada_editar', id=id))
+        db.execute(
+            '''UPDATE subcontratadas SET nome_fantasia=?, razao_social=?, cnpj=?, contato_nome=?, telefone=?, email=?, observacao=?
+            WHERE id=?''',
+            (
+                nf,
+                request.form.get('razao_social', '').strip(),
+                request.form.get('cnpj', '').strip(),
+                request.form.get('contato_nome', '').strip(),
+                request.form.get('telefone', '').strip(),
+                request.form.get('email', '').strip(),
+                request.form.get('observacao', '').strip(),
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Subcontratada atualizada!', 'success')
+        return redirect(url_for('subcontratadas'))
+    db.close()
+    return render_template('subcontratada_form.html', user=u, subcontratada=s)
+
+
+@app.route('/subcontratada/<int:id>/duplicar')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def subcontratada_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'subcontratada', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Subcontratada duplicada!', 'success')
+    return redirect(url_for('subcontratadas'))
+
+
+@app.route('/subcontratada/<int:id>/excluir')
+@login_required
+@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+def subcontratada_excluir(id):
+    db = get_db()
+    db.execute('DELETE FROM subcontratadas WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Subcontratada excluída.', 'success')
+    return redirect(url_for('subcontratadas'))
+
+
+@app.route('/financeiro/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def financeiro_editar(id):
+    u = get_user()
+    db = get_db()
+    d = db.execute('SELECT * FROM financeiro WHERE id=?', (id,)).fetchone()
+    if not d:
+        db.close()
+        flash('Documento não encontrado.', 'error')
+        return redirect(url_for('financeiro'))
+    if request.method == 'POST':
+        fn, orig, sz = d['filename'], d['original_filename'], d['file_size']
+        if 'file' in request.files and request.files['file'].filename:
+            _unlink_upload_doc(fn)
+            fn, orig, sz = save_upload(request.files['file'], 'documents')
+        db.execute(
+            'UPDATE financeiro SET tipo=?, titulo=?, descricao=?, filename=?, original_filename=?, file_size=? WHERE id=?',
+            (
+                request.form.get('tipo', d['tipo']),
+                request.form.get('titulo', d['titulo']),
+                request.form.get('descricao', ''),
+                fn,
+                orig,
+                sz,
+                id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash('Documento atualizado!', 'success')
+        return redirect(url_for('financeiro'))
+    db.close()
+    return render_template('financeiro_form.html', user=u, doc=d)
+
+
+@app.route('/financeiro/<int:id>/duplicar')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def financeiro_duplicar(id):
+    db = get_db()
+    _bulk_duplicate_entity(db, 'financeiro', id, get_user()['id'])
+    db.commit()
+    db.close()
+    flash('Documento duplicado!', 'success')
+    return redirect(url_for('financeiro'))
+
+
+@app.route('/financeiro/<int:id>/excluir')
+@login_required
+@role_required('adm_biocognitiva', 'administrador')
+def financeiro_excluir(id):
+    db = get_db()
+    row = db.execute('SELECT filename FROM financeiro WHERE id=?', (id,)).fetchone()
+    if row and row['filename']:
+        _unlink_upload_doc(row['filename'])
+    db.execute('DELETE FROM financeiro WHERE id=?', (id,))
+    db.commit()
+    db.close()
+    flash('Documento excluído.', 'success')
+    return redirect(url_for('financeiro'))
 
 
 @app.route('/clientes', methods=['GET','POST'])

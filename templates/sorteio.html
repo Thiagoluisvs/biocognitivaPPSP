@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Sorteio Aleatório{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-random"></i> Sorteio Aleatório</h2></div>
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-random"></i> Sorteio Aleatório</h2>
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>
+    </div>
+</div>
 <div class="grid-2">
 <div class="card"><div class="card-header"><h2><i class="fas fa-dice"></i> Realizar Novo Sorteio</h2></div><div class="card-body">
 <form method="POST">
@@ -11,11 +16,30 @@
 </form></div></div>
 
 <div class="card"><div class="card-header"><h2><i class="fas fa-history"></i> Histórico de Sorteios</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Motivo</th><th>Qtd</th><th>Sorteados</th></tr></thead><tbody>
-{% for s in sorteios %}<tr><td>{{ s.created_at[:10] }}</td><td>{{ s.titulo }}</td><td>{{ s.quantidade }}</td><td>
-    {% set cols = modules.json.loads(s.colaboradores_sorteados) if s.colaboradores_sorteados else [] %}
+<table class="table"><thead><tr>
+    <th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>
+    <th>Data</th><th>Motivo</th><th>Qtd</th><th>Sorteados</th><th class="actions-cell">Ações</th>
+</tr></thead><tbody>
+{% for s in sorteios %}<tr>
+    <td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ s.id }}" data-entity="sorteio"><span class="checkmark"></span></label></td>
+    <td>{{ s.created_at[:10] }}</td><td>{{ s.titulo }}</td><td>{{ s.quantidade }}</td><td>
+    {% set cols = s.colaboradores_sorteados|exames_json_list %}
     {% for c in cols %}<span class="badge badge-warning">{{ c.name }}</span> {% endfor %}
-</td></tr>{% endfor %}
+    </td>
+    <td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('sorteio_editar', id=s.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="{{ url_for('sorteio_duplicar', id=s.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <button type="button" onclick="confirmAction('Deseja excluir este sorteio?', '{{ url_for('sorteio_excluir', id=s.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+    </div></td>
+</tr>{% endfor %}
 </tbody></table></div></div>
+</div>
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info"><span id="selectedCount">0</span> itens selecionados</div>
+    <div class="bulk-buttons">
+        <button type="button" onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button type="button" onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button type="button" onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
 </div>
 {% endblock %}

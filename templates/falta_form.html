@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block page_title %}Editar falta{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('faltas') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-user-times"></i> Editar falta</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}" {% if falta.colaborador_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Data da falta *</label><input type="date" name="data_falta" class="form-input" value="{{ falta.data_falta }}" required></div>
+    <div class="form-group"><label>Observação</label><input type="text" name="observacao" class="form-input" value="{{ falta.observacao or '' }}"></div>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('faltas') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}

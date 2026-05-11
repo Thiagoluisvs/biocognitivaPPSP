@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Relatório de Faltas{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-user-times"></i> Relatório de Faltas</h2></div>
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-user-times"></i> Relatório de Faltas</h2>
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>
+    </div>
+</div>
 <div class="grid-2">
 <div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar Falta</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('falta_nova') }}">
@@ -12,8 +17,27 @@
 </form></div></div>
 
 <div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Faltas Registradas</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data Cadastro</th><th>Data Falta</th><th>Colaborador</th><th>Observação</th></tr></thead><tbody>
-{% for f in faltas %}<tr><td>{{ f.created_at[:10] }}</td><td><strong>{{ f.data_falta }}</strong></td><td>{{ f.colab_name }}</td><td>{{ f.observacao }}</td></tr>{% endfor %}
+<table class="table"><thead><tr>
+    <th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>
+    <th>Data Cadastro</th><th>Data Falta</th><th>Colaborador</th><th>Observação</th><th class="actions-cell">Ações</th>
+</tr></thead><tbody>
+{% for f in faltas %}<tr>
+    <td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ f.id }}" data-entity="falta"><span class="checkmark"></span></label></td>
+    <td>{{ f.created_at[:10] }}</td><td><strong>{{ f.data_falta }}</strong></td><td>{{ f.colab_name }}</td><td>{{ f.observacao }}</td>
+    <td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('falta_editar', id=f.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="{{ url_for('falta_duplicar', id=f.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <button type="button" onclick="confirmAction('Deseja excluir esta falta?', '{{ url_for('falta_excluir', id=f.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+    </div></td>
+</tr>{% endfor %}
 </tbody></table></div></div>
+</div>
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info"><span id="selectedCount">0</span> itens selecionados</div>
+    <div class="bulk-buttons">
+        <button type="button" onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button type="button" onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button type="button" onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
 </div>
 {% endblock %}

@@ -1,10 +1,22 @@
 {% extends "base.html" %}
 {% block page_title %}Estoque de kits{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-boxes"></i> Estoque de kits</h2></div>
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-boxes"></i> Estoque de kits</h2>
+    </div>
+</div>
 <div class="card"><div class="card-body" style="padding:2rem;">
     <p class="empty-state"><strong>Previsto para versão futura.</strong></p>
     <p class="text-muted">Controle de estoque dos kits de coleta será disponibilizado em uma próxima entrega (release {{ app_release }} — item reservado).</p>
+    <p class="text-muted" style="margin-top:1rem;">Quando o módulo estiver ativo, esta tela terá a mesma experiência das demais: seleção por linha, coluna <strong>Ações</strong> (editar, duplicar, excluir) e barra de ações em massa.</p>
+    <div class="card mt-2" style="opacity:.75;"><div class="card-header"><h3 style="font-size:1rem;margin:0;">Pré-visualização da tabela</h3></div><div class="card-body table-responsive">
+    <table class="table"><thead><tr>
+        <th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" disabled><span class="checkmark"></span></label></th>
+        <th>Item</th><th>Status</th><th class="actions-cell">Ações</th>
+    </tr></thead><tbody>
+        <tr><td colspan="4" class="empty-state" style="text-align:center;">Sem registros — em construção</td></tr>
+    </tbody></table></div></div>
     <a href="{{ url_for('dashboard') }}" class="btn btn-secondary mt-1"><i class="fas fa-arrow-left"></i> Voltar</a>
 </div></div>
 {% endblock %}

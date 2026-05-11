@@ -58,19 +58,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bulk action submission
     window.submitBulkAction = function(action) {
-        const ids = Array.from(rowChecks).filter(c => c.checked).map(c => c.value);
-        if (ids.length === 0) return;
-        
+        const selected = Array.from(rowChecks).filter(c => c.checked);
+        if (selected.length === 0) return;
+        const ids = selected.map(c => c.value);
+        const entity = selected[0].getAttribute('data-entity') || 'colaborador';
+
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = `/bulk-action/${action}`;
-        
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'ids';
-        input.value = JSON.stringify(ids);
-        
-        form.appendChild(input);
+
+        const inputIds = document.createElement('input');
+        inputIds.type = 'hidden';
+        inputIds.name = 'ids';
+        inputIds.value = JSON.stringify(ids);
+
+        const inputEntity = document.createElement('input');
+        inputEntity.type = 'hidden';
+        inputEntity.name = 'entity';
+        inputEntity.value = entity;
+
+        form.appendChild(inputIds);
+        form.appendChild(inputEntity);
         document.body.appendChild(form);
         form.submit();
     };

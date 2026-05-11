@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block page_title %}Serviços e Requerimentos{% endblock %}
 {% block content %}
-<div class="page-header"><h2><i class="fas fa-concierge-bell"></i> Agendar Serviços / Requerimentos</h2></div>
+<div class="page-header">
+    <div class="header-title">
+        <h2><i class="fas fa-concierge-bell"></i> Agendar Serviços / Requerimentos</h2>
+        {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>{% endif %}
+    </div>
+</div>
 <div class="grid-2">
 <div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Nova Solicitação</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('servico_novo') }}" enctype="multipart/form-data">
@@ -16,8 +21,30 @@
 </form></div></div>
 
 <div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Solicitações Realizadas</h2></div><div class="card-body table-responsive">
-<table class="table"><thead><tr><th>Data</th><th>Solicitante</th><th>Tipo</th><th>Assunto</th><th>Status</th></tr></thead><tbody>
-{% for s in servicos %}<tr><td>{{ s.created_at[:10] }}</td><td>{{ s.solicitante }}</td><td><span class="badge badge-info">{{ s.tipo.replace('_',' ').title() }}</span></td><td>{{ s.titulo }}</td><td><span class="badge badge-{{ s.status }}">{{ s.status.title() }}</span></td></tr>{% endfor %}
+<table class="table"><thead><tr>
+    {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
+    <th>Data</th><th>Solicitante</th><th>Tipo</th><th>Assunto</th><th>Status</th>
+    {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<th class="actions-cell">Ações</th>{% endif %}
+</tr></thead><tbody>
+{% for s in servicos %}<tr>
+    {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ s.id }}" data-entity="servico"><span class="checkmark"></span></label></td>{% endif %}
+    <td>{{ s.created_at[:10] }}</td><td>{{ s.solicitante }}</td><td><span class="badge badge-info">{{ s.tipo.replace('_',' ').title() }}</span></td><td>{{ s.titulo }}</td><td><span class="badge badge-{{ s.status }}">{{ s.status.replace('_',' ').title() }}</span></td>
+    {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}<td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('servico_editar', id=s.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="{{ url_for('servico_duplicar', id=s.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <button type="button" onclick="confirmAction('Deseja excluir esta solicitação?', '{{ url_for('servico_excluir', id=s.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+    </div></td>{% endif %}
+</tr>{% endfor %}
 </tbody></table></div></div>
 </div>
+{% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info"><span id="selectedCount">0</span> itens selecionados</div>
+    <div class="bulk-buttons">
+        <button type="button" onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button type="button" onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button type="button" onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

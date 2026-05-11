@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block page_title %}Editar subcontratada{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('subcontratadas') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-sitemap"></i> Editar subcontratada</h2>
+</div>
+<div class="card"><div class="card-body">
+<form method="POST">
+    <div class="form-group"><label>Nome fantasia *</label><input type="text" name="nome_fantasia" class="form-input" value="{{ subcontratada.nome_fantasia }}" required></div>
+    <div class="form-group"><label>Razão social</label><input type="text" name="razao_social" class="form-input" value="{{ subcontratada.razao_social or '' }}"></div>
+    <div class="form-group"><label>CNPJ</label><input type="text" name="cnpj" class="form-input" value="{{ subcontratada.cnpj or '' }}"></div>
+    <div class="grid-2"><div class="form-group"><label>Contato</label><input type="text" name="contato_nome" class="form-input" value="{{ subcontratada.contato_nome or '' }}"></div>
+    <div class="form-group"><label>Telefone</label><input type="text" name="telefone" class="form-input" value="{{ subcontratada.telefone or '' }}"></div></div>
+    <div class="form-group"><label>E-mail</label><input type="email" name="email" class="form-input" value="{{ subcontratada.email or '' }}"></div>
+    <div class="form-group"><label>Observação</label><textarea name="observacao" class="form-input" rows="2">{{ subcontratada.observacao or '' }}</textarea></div>
+    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:12px;"><button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button><a href="{{ url_for('subcontratadas') }}" class="btn btn-outline">Cancelar</a></div>
+</form>
+</div></div>
+{% endblock %}
