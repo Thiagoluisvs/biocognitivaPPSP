@@ -163,6 +163,11 @@ def save_upload(file, subfolder='documents'):
     os.makedirs(os.path.dirname(path),exist_ok=True); file.save(path)
     return saved, fn, os.path.getsize(path)
 
+@app.errorhandler(sqlite3.Error)
+def handle_db_error(e):
+    flash(f"Erro de Banco de Dados: {e}", "error")
+    return redirect(request.referrer or url_for('dashboard'))
+
 @app.route('/')
 def index():
     return redirect(url_for('dashboard')) if 'user_id' in session else redirect(url_for('login'))
@@ -372,14 +377,22 @@ def colaborador_editar(id):
 def colaborador_excluir(id):
     u=get_user()
     db=get_db()
-    colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
-    if colab:
-        old_values = dict(colab)
-        db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
-        log_audit(u['id'], 'DELETE', 'colaboradores', id, old_values=old_values, new_values={})
-        db.commit()
-    db.close()
-    flash('Colaborador excluído.','success')
+    try:
+        colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
+        if colab:
+            old_values = dict(colab)
+            _delete_colaborador_dependencies(db, id)
+            db.execute('DELETE FROM colaboradores WHERE id=?',(id,))
+            log_audit(u['id'], 'DELETE', 'colaboradores', id, old_values=old_values, new_values={})
+            db.commit()
+            flash('Colaborador e dados vinculados excluídos com sucesso.','success')
+        else:
+            flash('Colaborador não encontrado.','error')
+    except Exception as e:
+        db.rollback()
+        flash(f'Erro ao excluir colaborador: {e}','error')
+    finally:
+        db.close()
     return redirect(url_for('colaboradores'))
 
 @app.route('/colaborador/<int:id>/duplicar')
@@ -410,6 +423,32 @@ def _unlink_upload_doc(filename):
             os.remove(full)
         except OSError:
             pass
+
+
+def _delete_colaborador_dependencies(db, cid):
+    """Remove todas as dependências de um colaborador antes de excluí-lo"""
+    # 1. Agendamentos e suas dependências
+    agends = db.execute('SELECT id FROM agendamentos WHERE colaborador_id=?', (cid,)).fetchall()
+    for a in agends:
+        _delete_agendamento_dependencies(db, a['id'])
+    db.execute('DELETE FROM agendamentos WHERE colaborador_id=?', (cid,))
+    
+    # 2. Outras tabelas diretas
+    db.execute('DELETE FROM treinamentos WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM resultados_exames WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM avaliacao_tentativas WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM faltas WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM controle_positivo WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM rastreabilidade WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM prontuarios WHERE colaborador_id=?', (cid,))
+    db.execute('DELETE FROM video_progresso WHERE colaborador_id=?', (cid,))
+
+
+def _delete_agendamento_dependencies(db, aid):
+    """Remove dependências de um agendamento (FKs)"""
+    db.execute('UPDATE resultados_exames SET agendamento_id=NULL WHERE agendamento_id=?', (aid,))
+    db.execute('UPDATE faltas SET agendamento_id=NULL WHERE agendamento_id=?', (aid,))
+    db.execute('UPDATE controle_positivo SET resultado_id=NULL WHERE resultado_id IN (SELECT id FROM resultados_exames WHERE agendamento_id=?)', (aid,))
 
 
 def _bulk_duplicate_entity(db, entity, eid, uid):
@@ -577,10 +616,10 @@ def bulk_action(action):
             for i in ids:
                 i = int(i)
                 if entity == 'colaborador':
+                    _delete_colaborador_dependencies(db, i)
                     db.execute('DELETE FROM colaboradores WHERE id=?', (i,))
                 elif entity == 'agendamento':
-                    db.execute('UPDATE resultados_exames SET agendamento_id=NULL WHERE agendamento_id=?', (i,))
-                    db.execute('UPDATE faltas SET agendamento_id=NULL WHERE agendamento_id=?', (i,))
+                    _delete_agendamento_dependencies(db, i)
                     db.execute('DELETE FROM agendamentos WHERE id=?', (i,))
                 elif entity == 'treinamento':
                     tr = db.execute('SELECT arquivo_gravacao FROM treinamentos WHERE id=?', (i,)).fetchone()
@@ -773,8 +812,16 @@ def agendamento_editar(id):
 @role_required('supervisor','adm_biocognitiva','administrador')
 def agendamento_excluir(id):
     db=get_db()
-    db.execute('DELETE FROM agendamentos WHERE id=?',(id,))
-    db.commit(); db.close(); flash('Agendamento excluído.','success')
+    try:
+        _delete_agendamento_dependencies(db, id)
+        db.execute('DELETE FROM agendamentos WHERE id=?',(id,))
+        db.commit()
+        flash('Agendamento excluído.','success')
+    except Exception as e:
+        db.rollback()
+        flash(f'Erro ao excluir agendamento: {e}','error')
+    finally:
+        db.close()
     return redirect(url_for('agendamentos'))
 
 @app.route('/agendamento/<int:id>/duplicar')
