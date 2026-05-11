@@ -23,12 +23,11 @@
 <div class="card" style="grid-column:1/-1;"><div class="card-header"><h2><i class="fas fa-folder-open"></i> Por categoria</h2></div><div class="card-body">
 {% for category, group in docs|sort(attribute='category')|groupby('category') %}
 <h3 style="font-size:1rem;margin:1rem 0 .5rem;border-bottom:1px solid var(--border,#ddd);padding-bottom:.25rem;">{{ category.replace('_',' ').title() }}</h3>
-<div class="table-responsive"><table class="table"><thead><tr><th>Inclusão</th><th>Título</th><th>Nome do arquivo</th><th>Consulta PDF</th></tr></thead><tbody>
+<div class="table-responsive"><table class="table"><thead><tr><th>Inclusão</th><th>Título</th><th>Consulta PDF</th></tr></thead><tbody>
 {% for d in group|sort(attribute='created_at', reverse=true) %}
 <tr>
     <td>{{ d.created_at[:10] }}</td>
     <td><strong>{{ d.title }}</strong>{% if d.description %}<br><small>{{ d.description }}</small>{% endif %}</td>
-    <td><code style="font-size:.85rem;">{{ d.original_filename }}</code></td>
     <td><a href="{{ url_for('serve_document', filename=d.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="fas fa-file-pdf"></i> Abrir</a></td>
 </tr>{% endfor %}
 </tbody></table></div>
