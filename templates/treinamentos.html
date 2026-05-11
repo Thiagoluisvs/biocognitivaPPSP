@@ -24,5 +24,16 @@
     <td><span class="badge badge-{{ t.status }}">{{ t.status.title() }}</span></td>
 </tr>{% endfor %}
 </tbody></table></div></div>
+<!-- Bulk Actions Bar -->
+<div id="bulkActionsBar" class="bulk-actions-bar">
+    <div class="bulk-info">
+        <span id="selectedCount">0</span> itens selecionados
+    </div>
+    <div class="bulk-buttons">
+        <button onclick="submitBulkAction('editar')" class="btn btn-bulk btn-sm"><i class="fas fa-edit"></i> Editar em massa</button>
+        <button onclick="submitBulkAction('duplicar')" class="btn btn-bulk btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        <button onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
+    </div>
+</div>
 </div>
 {% endblock %}
