@@ -36,12 +36,26 @@ TIPO_EVENTO_LABELS = {
     'agendamento_medico_revisor': 'Agendamento — Médico revisor',
 }
 
-ALL_MODULES_KEYS = [
-    'institucional', 'colaboradores', 'agendamentos', 'resultados',
-    'financeiro', 'relatorios', 'servicos', 'treinamentos',
-    'faltas', 'sorteio', 'subcontratadas', 'controle_positivo',
-    'clientes', 'estoque_kits', 'settings', 'auditoria', 'admin_users'
+ALL_MODULES = [
+    ('institucional',    'Institucional / PPSP'),
+    ('colaboradores',    'Colaboradores'),
+    ('agendamentos',     'Agendamentos'),
+    ('resultados',       'Resultados de Exames'),
+    ('financeiro',       'Financeiro'),
+    ('relatorios',       'Relatórios'),
+    ('servicos',         'Serviços / Requerimentos'),
+    ('treinamentos',     'Treinamentos'),
+    ('faltas',           'Faltas'),
+    ('sorteio',          'Sorteio Aleatório'),
+    ('subcontratadas',   'Subcontratadas'),
+    ('controle_positivo','Eventos Impeditivos'),
+    ('clientes',         'Cadastro de Clientes'),
+    ('estoque_kits',     'Estoque de Kits'),
+    ('settings',         'Configurações do Sistema'),
+    ('auditoria',        'Auditoria do Sistema'),
+    ('admin_users',      'Gestão de Usuários'),
 ]
+ALL_MODULES_KEYS = [m[0] for m in ALL_MODULES]
 
 
 @app.template_filter('exames_json_list')
@@ -2378,26 +2392,7 @@ def create_user():
         finally:
             db.close()
     
-    modules = [
-        ('institucional', 'Institucional'),
-        ('colaboradores', 'Colaboradores'),
-        ('agendamentos', 'Agendamentos'),
-        ('resultados', 'Resultados'),
-        ('financeiro', 'Financeiro'),
-        ('relatorios', 'Relatórios'),
-        ('servicos', 'Serviços'),
-        ('treinamentos', 'Treinamentos'),
-        ('faltas', 'Faltas'),
-        ('sorteio', 'Sorteio'),
-        ('subcontratadas', 'Subcontratadas'),
-        ('controle_positivo', 'Eventos Impeditivos'),
-        ('clientes', 'Cadastro de Clientes'),
-        ('estoque_kits', 'Estoque de Kits'),
-        ('settings', 'Configurações do Sistema'),
-        ('auditoria', 'Auditoria do Sistema'),
-        ('admin_users', 'Gestão de Usuários')
-    ]
-    return render_template('user_form.html', user=u, action='create', modules=modules)
+    return render_template('user_form.html', user=u, action='create', modules=ALL_MODULES)
 
 @app.route('/admin/user/<int:uid>/impersonate')
 @login_required
@@ -2475,26 +2470,6 @@ def edit_user(uid):
     except:
         target_usr['permissions'] = {}
     
-    modules = [
-        ('institucional', 'Institucional'),
-        ('colaboradores', 'Colaboradores'),
-        ('agendamentos', 'Agendamentos'),
-        ('resultados', 'Resultados'),
-        ('financeiro', 'Financeiro'),
-        ('relatorios', 'Relatórios'),
-        ('servicos', 'Serviços'),
-        ('treinamentos', 'Treinamentos'),
-        ('faltas', 'Faltas'),
-        ('sorteio', 'Sorteio'),
-        ('subcontratadas', 'Subcontratadas'),
-        ('controle_positivo', 'Eventos Impeditivos'),
-        ('clientes', 'Cadastro de Clientes'),
-        ('estoque_kits', 'Estoque de Kits'),
-        ('settings', 'Configurações do Sistema'),
-        ('auditoria', 'Auditoria do Sistema'),
-        ('admin_users', 'Gestão de Usuários')
-    ]
-
     if request.method == 'POST':
         name = request.form.get('name')
         email = request.form.get('email')
@@ -2553,7 +2528,7 @@ def edit_user(uid):
             db.close()
             
     db.close()
-    return render_template('user_form.html', user=u, action='edit', target_user=target_usr, modules=modules)
+    return render_template('user_form.html', user=u, action='edit', target_user=target_usr, modules=ALL_MODULES)
 
 @app.route('/admin/user/<int:uid>/delete', methods=['POST'])
 @login_required
