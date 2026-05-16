@@ -98,20 +98,50 @@ def role_required(*roles):
         return dec
     return decorator
 
-def check_permission(module, level='view'):
-    u = get_user()
-    if not u: return False
+def check_permission(user_or_module, module_or_level='view', level=None):
+    """
+    Aceita duas formas de chamada:
+    - Backend:  check_permission('modulo', 'admin')
+    - Template: check_permission(user, 'modulo', 'admin')
+    """
+    if level is not None:
+        # Chamada do template: check_permission(user, module, level)
+        u = user_or_module
+        mod = module_or_level
+        lv = level
+    else:
+        # Chamada do backend: check_permission(module, level)
+        u = get_user()
+        mod = user_or_module
+        lv = module_or_level
+
+    if not u:
+        return False
+
+    role = u.get('role', '') if isinstance(u, dict) else u['role']
+
     # Super Admin sempre tem acesso total
-    if u['role'] == 'super_admin': return True
-    
-    perms = u.get('permissions', {})
-    user_level = perms.get(module, 'none')
-    
-    if level == 'admin':
+    if role == 'super_admin':
+        return True
+
+    # Busca permissões (já pode ser dict ou string JSON)
+    raw_perms = u.get('permissions', {}) if isinstance(u, dict) else u['permissions']
+    if isinstance(raw_perms, str):
+        try:
+            perms = json.loads(raw_perms)
+        except Exception:
+            perms = {}
+    else:
+        perms = raw_perms or {}
+
+    user_level = perms.get(mod, 'none')
+
+    if lv == 'admin':
         return user_level == 'admin'
-    if level == 'view':
+    if lv == 'view':
         return user_level in ('view', 'admin')
     return False
+
 
 def permission_required(module, level='view'):
     def decorator(f):
