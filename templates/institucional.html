@@ -2,10 +2,10 @@
 {% block page_title %}Institucional / PPSP{% endblock %}
 {% block content %}
 <div class="page-header"><h2><i class="fas fa-building"></i> Documentos institucionais</h2>
-{% if user.role=='supervisor' %}<p class="text-muted"><i class="fas fa-eye"></i> <strong>Consulta apenas.</strong> Envio de arquivos é feito pela Biocognitiva (ADM).</p>{% endif %}
+{% if not check_permission(user, 'institucional', 'admin') %}<p class="text-muted"><i class="fas fa-eye"></i> <strong>Consulta apenas.</strong> Envio de arquivos é feito pela Biocognitiva (ADM).</p>{% endif %}
 </div>
 <div class="grid-2">
-{% if user.role in ('adm_biocognitiva','administrador','super_admin') %}
+{% if check_permission(user, 'institucional', 'admin') %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar documento</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('institucional_upload') }}" enctype="multipart/form-data">
     <div class="form-group"><label>Categoria *</label><select name="category" class="form-select" required>
@@ -31,7 +31,7 @@
     <td class="text-right">
         <div class="btn-group">
             <a href="{{ url_for('serve_document', filename=d.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary" title="Abrir PDF"><i class="fas fa-file-pdf"></i> Abrir</a>
-            {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}
+            {% if check_permission(user, 'institucional', 'admin') %}
             <a href="{{ url_for('institucional_edit', id=d.id) }}" class="btn btn-sm btn-outline" title="Editar"><i class="fas fa-edit"></i></a>
             <a href="{{ url_for('institucional_excluir', id=d.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('Excluir este documento?')" title="Excluir"><i class="fas fa-trash"></i></a>
             {% endif %}

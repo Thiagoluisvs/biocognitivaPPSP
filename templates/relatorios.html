@@ -4,10 +4,10 @@
 <div class="page-header">
     <div class="header-title">
         <h2><i class="fas fa-file-alt"></i> Relatórios do programa</h2>
-        {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}<div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>{% endif %}
+        {% if check_permission(user, 'relatorios', 'admin') %}<div class="search-box"><i class="fas fa-search"></i><input type="text" id="tableSearch" placeholder="Pesquisar..." onkeyup="filterTable()"></div>{% endif %}
     </div>
 </div>
-{% if user.role=='supervisor' %}<p class="text-muted"><strong>Consulta apenas.</strong> Novos relatórios são publicados pela Biocognitiva (ADM).</p>{% endif %}
+{% if not check_permission(user, 'relatorios', 'admin') %}<p class="text-muted"><strong>Consulta apenas.</strong> Novos relatórios são publicados pela Biocognitiva (ADM).</p>{% endif %}
 <div class="grid-2">
 {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar relatório</h2></div><div class="card-body">
@@ -18,19 +18,19 @@
     <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar</button>
 </form></div></div>
 {% endif %}
-<div class="card" style="{% if user.role not in ('adm_biocognitiva','administrador','super_admin') %}grid-column:1/-1;{% endif %}"><div class="card-header"><h2><i class="fas fa-list"></i> Disponíveis</h2></div><div class="card-body table-responsive">
+<div class="card" style="{% if not check_permission(user, 'relatorios', 'admin') %}grid-column:1/-1;{% endif %}"><div class="card-header"><h2><i class="fas fa-list"></i> Disponíveis</h2></div><div class="card-body table-responsive">
 <table class="table"><thead><tr>
-    {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
+    {% if check_permission(user, 'relatorios', 'admin') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
     <th>Data</th><th>Título</th><th>Arquivo</th><th>Abrir</th>
-    {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}<th class="actions-cell">Ações</th>{% endif %}
+    {% if check_permission(user, 'relatorios', 'admin') %}<th class="actions-cell">Ações</th>{% endif %}
 </tr></thead><tbody>
 {% for r in relatorios %}<tr>
-    {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ r.id }}" data-entity="relatorio"><span class="checkmark"></span></label></td>{% endif %}
+    {% if check_permission(user, 'relatorios', 'admin') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ r.id }}" data-entity="relatorio"><span class="checkmark"></span></label></td>{% endif %}
     <td>{{ r.created_at[:10] }}</td>
     <td><strong>{{ r.titulo }}</strong>{% if r.descricao %}<br><small>{{ r.descricao }}</small>{% endif %}</td>
     <td><code style="font-size:.85rem;">{{ r.original_filename }}</code></td>
     <td><a href="{{ url_for('serve_document', filename=r.filename) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="fas fa-file-pdf"></i> PDF</a></td>
-    {% if user.role in ('adm_biocognitiva','administrador','super_admin') %}<td class="actions-cell"><div class="actions-group">
+    {% if check_permission(user, 'relatorios', 'admin') %}<td class="actions-cell"><div class="actions-group">
         <a href="{{ url_for('relatorio_editar', id=r.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
         <a href="{{ url_for('relatorio_duplicar', id=r.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
         <button type="button" onclick="confirmAction('Deseja excluir este relatório?', '{{ url_for('relatorio_excluir', id=r.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>

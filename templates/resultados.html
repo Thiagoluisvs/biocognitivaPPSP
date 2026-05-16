@@ -10,7 +10,7 @@
         </div>
     </div>
 </div>
-{% if user.role in ('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador','super_admin') %}
+{% if check_permission(user, 'resultados', 'admin') %}
 <div class="card mb-2"><div class="card-header"><h2><i class="fas fa-plus"></i> Lançar resultado</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('resultado_novo') }}" enctype="multipart/form-data">
     <div class="grid-2">
@@ -76,12 +76,12 @@
 <form class="search-form" method="GET" style="display:inline;"><input type="text" name="search" placeholder="Nome ou CPF..." value="{{ search }}" class="form-input" style="width:260px;display:inline-block;"><button type="submit" class="btn btn-secondary"><i class="fas fa-search"></i></button></form>
 </div><div class="card-body table-responsive">
 <table class="table"><thead><tr>
-    {% if user.role in ('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador','super_admin') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
+    {% if check_permission(user, 'resultados', 'admin') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
     <th>Data cadastro</th><th>Data coleta</th><th>Colaborador</th><th>Status Exames</th><th>Obs.</th>
     <th class="actions-cell">Ações</th>
 </tr></thead><tbody>
 {% for r in resultados %}<tr>
-    {% if user.role in ('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador','super_admin') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ r.id }}" data-entity="resultado"><span class="checkmark"></span></label></td>{% endif %}
+    {% if check_permission(user, 'resultados', 'admin') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ r.id }}" data-entity="resultado"><span class="checkmark"></span></label></td>{% endif %}
     <td>{{ r.created_at[:10] }}</td>
     <td><strong>{% if r.data_coleta %}{{ r.data_coleta }}{% elif r.agendamento_data_coleta %}{{ r.agendamento_data_coleta }}{% else %}—{% endif %}</strong></td>
     <td>{{ r.colab_name }}</td>
@@ -115,7 +115,7 @@
         <a href="{{ url_for('serve_document', filename=r.foto_bafometro) }}" target="_blank" class="btn-icon" title="Resultado Alcoolemia" style="color:var(--danger);"><i class="fas fa-wind"></i></a>
         {% endif %}
 
-        {% if user.role in ('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador','super_admin') %}
+        {% if check_permission(user, 'resultados', 'admin') %}
         <a href="{{ url_for('resultado_editar', id=r.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
         <a href="{{ url_for('resultado_duplicar', id=r.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
         <button type="button" onclick="confirmAction('Deseja excluir este resultado?', '{{ url_for('resultado_excluir', id=r.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>

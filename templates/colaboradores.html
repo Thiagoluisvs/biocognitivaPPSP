@@ -11,7 +11,7 @@
     </div>
     <div class="header-actions">
         <a href="{{ url_for('export_csv', type='colaboradores') }}" class="btn btn-outline btn-sm"><i class="fas fa-file-export"></i> Exportar CSV</a>
-        {% if user.role in ('supervisor','adm_biocognitiva','administrador','super_admin') %}
+        {% if check_permission('colaboradores', 'admin') %}
         <a href="{{ url_for('colaborador_novo') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Colaborador</a>
         {% endif %}
     </div>
@@ -34,7 +34,9 @@
                     <th>Empresa</th>
                     <th>Status</th>
                     <th>Cadastro</th>
+                    {% if check_permission('colaboradores', 'admin') %}
                     <th class="actions-cell">Ações</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -60,6 +62,7 @@
                         <small style="color: #666;">{{ c.created_at[:10] }}</small><br>
                         <small style="color: #999;">{{ c.created_at[11:16] }}</small>
                     </td>
+                    {% if check_permission('colaboradores', 'admin') %}
                     <td class="actions-cell">
                         <div class="actions-group">
                             <a href="{{ url_for('colaborador_editar', id=c.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
@@ -67,6 +70,7 @@
                             <button onclick="confirmAction('Deseja excluir este colaborador?', '{{ url_for('colaborador_excluir', id=c.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
@@ -82,6 +86,7 @@
 </div>
 
 <!-- Bulk Actions Bar -->
+{% if check_permission('colaboradores', 'admin') %}
 <div id="bulkActionsBar" class="bulk-actions-bar">
     <div class="bulk-info">
         <span id="selectedCount">0</span> itens selecionados
@@ -92,4 +97,6 @@
         <button onclick="submitBulkAction('excluir')" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i> Excluir</button>
     </div>
 </div>
+{% endif %}
+
 {% endblock %}

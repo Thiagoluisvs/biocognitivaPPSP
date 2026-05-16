@@ -25,7 +25,7 @@ def init_db():
         role TEXT NOT NULL DEFAULT 'colaborador' CHECK(role IN ('supervisor','colaborador','tecnico','adm_biocognitiva','administrador','super_admin')),
         cpf TEXT DEFAULT '', phone TEXT DEFAULT '', address TEXT DEFAULT '',
         funcao TEXT DEFAULT '', data_admissao TEXT DEFAULT '',
-        empresa TEXT DEFAULT '', active INTEGER DEFAULT 1,
+        empresa TEXT DEFAULT '', permissions TEXT DEFAULT '{}', active INTEGER DEFAULT 1,
         last_login TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')

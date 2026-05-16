@@ -96,8 +96,13 @@
                     <td class="actions-cell">
                         <div class="actions-group">
                             <a href="{{ url_for('edit_user', uid=u.id) }}" class="btn-icon edit" title="Editar">
-                                <i class="fas fa-edit"></i>
-                            </a>
+                                 <i class="fas fa-edit"></i>
+                             </a>
+                             {% if session.get('role') == 'super_admin' and u.id != session.user_id %}
+                             <a href="{{ url_for('impersonate_user', uid=u.id) }}" class="btn-icon inspect" title="Inspecionar Usuário" style="color: var(--bio-blue);">
+                                 <i class="fas fa-eye"></i>
+                             </a>
+                             {% endif %}
                             
                             {% if u.id != session.user_id %}
                             <form method="POST" action="{{ url_for('toggle_user', uid=u.id) }}" style="display:inline">

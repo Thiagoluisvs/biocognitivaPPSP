@@ -15,6 +15,61 @@
     </div>
 </div>
 
+<style>
+    .custom-radio {
+        display: inline-block;
+        position: relative;
+        padding-left: 25px;
+        cursor: pointer;
+        font-size: 14px;
+        user-select: none;
+    }
+    .custom-radio input {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+    }
+    .radio-mark {
+        position: absolute;
+        top: -10px;
+        left: 0;
+        height: 18px;
+        width: 18px;
+        background-color: var(--bg-input);
+        border: 2px solid var(--border);
+        border-radius: 50%;
+    }
+    .custom-radio:hover input ~ .radio-mark {
+        background-color: var(--bg-card);
+    }
+    .custom-radio input:checked ~ .radio-mark {
+        background-color: var(--bio-blue);
+        border-color: var(--bio-blue);
+    }
+    .radio-mark:after {
+        content: "";
+        position: absolute;
+        display: none;
+    }
+    .custom-radio input:checked ~ .radio-mark:after {
+        display: block;
+    }
+    .custom-radio .radio-mark:after {
+        top: 4px;
+        left: 4px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: white;
+    }
+    
+    /* Cores para os níveis */
+    tr:hover { background: rgba(0,0,0,0.02); }
+    [data-theme="dark"] tr:hover { background: rgba(255,255,255,0.02); }
+    
+    .table th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+
 <div class="card" style="max-width: 900px; margin: 0 auto;">
     <div class="card-header">
         <h2><i class="fas fa-id-card"></i> Dados do Usuário</h2>
@@ -50,7 +105,9 @@
                         <option value="tecnico" {% if target_user and target_user.role == 'tecnico' %}selected{% endif %}>Técnico Biocognitiva</option>
                         <option value="adm_biocognitiva" {% if target_user and target_user.role == 'adm_biocognitiva' %}selected{% endif %}>ADM Biocognitiva</option>
                         <option value="administrador" {% if target_user and target_user.role == 'administrador' %}selected{% endif %}>Administrador Geral</option>
+                        {% if user.role == 'super_admin' %}
                         <option value="super_admin" {% if target_user and target_user.role == 'super_admin' %}selected{% endif %}>Super Admin</option>
+                        {% endif %}
                     </select>
                 </div>
 
@@ -93,6 +150,48 @@
                     <label for="active" style="margin-bottom: 0; cursor: pointer;">Usuário Ativo</label>
                 </div>
                 {% endif %}
+            </div>
+
+            <!-- Módulos e Permissões -->
+            <div style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">
+                <h3 style="margin-bottom: 20px; color: var(--text-primary);"><i class="fas fa-shield-alt"></i> Controle de Acesso por Módulo</h3>
+                <div class="table-responsive">
+                    <table class="table" style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--bg-card); border-bottom: 2px solid var(--border);">
+                                <th style="text-align: left; padding: 12px;">Módulo</th>
+                                <th style="text-align: center; padding: 12px; width: 150px;">Acesso Total</th>
+                                <th style="text-align: center; padding: 12px; width: 150px;">Visualização</th>
+                                <th style="text-align: center; padding: 12px; width: 150px;">Nenhum</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for mod_id, mod_name in modules %}
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 12px; font-weight: 500;">{{ mod_name }}</td>
+                                <td style="text-align: center; padding: 12px;">
+                                    <label class="custom-radio">
+                                        <input type="radio" name="perm_{{ mod_id }}" value="admin" {% if target_user and target_user.permissions.get(mod_id) == 'admin' %}checked{% endif %}>
+                                        <span class="radio-mark"></span>
+                                    </label>
+                                </td>
+                                <td style="text-align: center; padding: 12px;">
+                                    <label class="custom-radio">
+                                        <input type="radio" name="perm_{{ mod_id }}" value="view" {% if target_user and target_user.permissions.get(mod_id) == 'view' %}checked{% endif %}>
+                                        <span class="radio-mark"></span>
+                                    </label>
+                                </td>
+                                <td style="text-align: center; padding: 12px;">
+                                    <label class="custom-radio">
+                                        <input type="radio" name="perm_{{ mod_id }}" value="none" {% if not target_user or not target_user.permissions.get(mod_id) or target_user.permissions.get(mod_id) == 'none' %}checked{% endif %}>
+                                        <span class="radio-mark"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div style="margin-top: 32px; display: flex; justify-content: flex-end; gap: 16px;">

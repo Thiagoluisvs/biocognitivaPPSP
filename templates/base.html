@@ -41,43 +41,80 @@
     </div>
     <ul class="sidebar-menu">
         <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-home"></i><span>Dashboard</span></a></li>
-        {% if session.get('role') == 'colaborador' %}
+        
+        {% if check_permission('treinamentos') %}
         <li><a href="{{ url_for('video_aulas') }}" class="{% if request.endpoint=='video_aulas' %}active{% endif %}"><i class="fas fa-video"></i><span>Vídeo Aulas</span></a></li>
         {% endif %}
-        {% if session.get('role') != 'colaborador' %}
+
+        {% if check_permission('institucional') %}
         <li><a href="{{ url_for('institucional') }}" class="{% if request.endpoint=='institucional' %}active{% endif %}"><i class="fas fa-building"></i><span>Institucional</span></a></li>
+        {% endif %}
+        
+        {% if check_permission('colaboradores') %}
         <li><a href="{{ url_for('colaboradores') }}" class="{% if request.endpoint=='colaboradores' %}active{% endif %}"><i class="fas fa-users"></i><span>Colaboradores</span></a></li>
+        {% endif %}
+
+        {% if check_permission('agendamentos') %}
         <li><a href="{{ url_for('agendamentos') }}" class="{% if request.endpoint=='agendamentos' %}active{% endif %}"><i class="fas fa-calendar-alt"></i><span>Agendamentos</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('supervisor','adm_biocognitiva','administrador','super_admin') %}
+
+        {% if check_permission('treinamentos') %}
         <li><a href="{{ url_for('treinamentos') }}" class="{% if request.endpoint=='treinamentos' %}active{% endif %}"><i class="fas fa-chalkboard-teacher"></i><span>Treinamentos</span></a></li>
+        {% endif %}
+
+        {% if check_permission('subcontratadas') %}
         <li><a href="{{ url_for('subcontratadas') }}" class="{% if request.endpoint=='subcontratadas' %}active{% endif %}"><i class="fas fa-sitemap"></i><span>Subcontratadas</span></a></li>
         {% endif %}
-        {% if session.get('role') != 'colaborador' %}
+
+        {% if check_permission('resultados') %}
         <li><a href="{{ url_for('resultados') }}" class="{% if request.endpoint=='resultados' %}active{% endif %}"><i class="fas fa-flask"></i><span>Resultados</span></a></li>
+        {% endif %}
+
+        {% if check_permission('relatorios') %}
         <li><a href="{{ url_for('relatorios') }}" class="{% if request.endpoint=='relatorios' %}active{% endif %}"><i class="fas fa-file-alt"></i><span>Relatórios</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('supervisor','adm_biocognitiva','administrador','super_admin') %}
+
+        {% if check_permission('servicos') %}
         <li><a href="{{ url_for('servicos') }}" class="{% if request.endpoint=='servicos' %}active{% endif %}"><i class="fas fa-concierge-bell"></i><span>Serviços</span></a></li>
+        {% endif %}
+
+        {% if check_permission('sorteio') %}
         <li><a href="{{ url_for('sorteio') }}" class="{% if request.endpoint=='sorteio' %}active{% endif %}"><i class="fas fa-random"></i><span>Sorteio</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('tecnico','adm_biocognitiva','administrador','super_admin') %}
+
+        {% if check_permission('faltas') %}
         <li><a href="{{ url_for('faltas') }}" class="{% if request.endpoint=='faltas' %}active{% endif %}"><i class="fas fa-user-times"></i><span>Faltas</span></a></li>
+        {% endif %}
+
+        {% if check_permission('controle_positivo') or check_permission('agendamentos') %}
         <li><a href="{{ url_for('controle_positivo') }}" class="{% if request.endpoint=='controle_positivo' %}active{% endif %}"><i class="fas fa-ban"></i><span>Eventos impeditivos</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('adm_biocognitiva','administrador','super_admin') %}
+
+        {% if check_permission('clientes') %}
         <li><a href="{{ url_for('clientes') }}" class="{% if request.endpoint=='clientes' %}active{% endif %}"><i class="fas fa-handshake"></i><span>Cadastro de clientes</span></a></li>
+        {% endif %}
+        
+        {% if check_permission('estoque_kits') %}
         <li><a href="{{ url_for('estoque_kits') }}" class="{% if request.endpoint=='estoque_kits' %}active{% endif %}"><i class="fas fa-boxes"></i><span>Estoque de kits</span></a></li>
+        {% endif %}
+
+        {% if check_permission('financeiro') %}
         <li><a href="{{ url_for('financeiro') }}" class="{% if request.endpoint=='financeiro' %}active{% endif %}"><i class="fas fa-dollar-sign"></i><span>Financeiro</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('administrador', 'super_admin') %}
+
+        {% if check_permission('admin_users') %}
         <li><a href="{{ url_for('admin_users') }}" class="{% if request.endpoint=='admin_users' %}active{% endif %}"><i class="fas fa-users-cog"></i><span>Usuários</span></a></li>
+        {% endif %}
+
+        {% if check_permission('settings') %}
         <li><a href="{{ url_for('settings') }}" class="{% if request.endpoint=='settings' %}active{% endif %}"><i class="fas fa-cog"></i><span>Configurações</span></a></li>
         {% endif %}
-        {% if session.get('role') == 'super_admin' %}
+
+        {% if check_permission('admin_users', 'admin') %}
         <li><a href="{{ url_for('superadmin') }}" class="{% if request.endpoint=='superadmin' %}active{% endif %}" style="color:var(--bio-green)"><i class="fas fa-tools"></i><span>Super Admin</span></a></li>
         {% endif %}
-        {% if session.get('role') in ('adm_biocognitiva','administrador','super_admin') %}
+
+        {% if check_permission('auditoria') %}
         <li><a href="{{ url_for('auditoria') }}" class="{% if request.endpoint=='auditoria' %}active{% endif %}"><i class="fas fa-history"></i><span>Auditoria</span></a></li>
         {% endif %}
     </ul>
@@ -93,6 +130,14 @@
             <span class="badge badge-{{ session.get('role') }}">{{ session.get('role','').replace('_',' ').title() }}</span>
         </div>
     </header>
+    {% if session.get('impersonator_id') %}
+    <div style="background: var(--bio-blue); color: white; padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+        <i class="fas fa-user-secret"></i> VOCÊ ESTÁ INSPECIONANDO O SISTEMA COMO: <strong>{{ session.get('name') }}</strong>
+        <a href="{{ url_for('stop_impersonation') }}" style="color: white; margin-left: 20px; text-decoration: underline; font-weight: 700;">
+            <i class="fas fa-sign-out-alt"></i> PARAR INSPEÇÃO
+        </a>
+    </div>
+    {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">{% for c,m in messages %}<div class="flash flash-{{ c }}"><i class="fas fa-{% if c=='success' %}check-circle{% elif c=='error' %}exclamation-circle{% elif c=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>{{ m }}<button type="button" class="flash-close" onclick="this.parentElement.remove()">&times;</button></div>{% endfor %}</div>{% endif %}{% endwith %}
     <div class="content-area">{% block content %}{% endblock %}</div>
 </main>

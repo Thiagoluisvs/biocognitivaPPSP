@@ -36,6 +36,13 @@ TIPO_EVENTO_LABELS = {
     'agendamento_medico_revisor': 'Agendamento — Médico revisor',
 }
 
+ALL_MODULES_KEYS = [
+    'institucional', 'colaboradores', 'agendamentos', 'resultados',
+    'financeiro', 'relatorios', 'servicos', 'treinamentos',
+    'faltas', 'sorteio', 'subcontratadas', 'controle_positivo',
+    'clientes', 'estoque_kits', 'settings', 'auditoria', 'admin_users'
+]
+
 
 @app.template_filter('exames_json_list')
 def exames_json_list(s):
@@ -91,6 +98,39 @@ def role_required(*roles):
         return dec
     return decorator
 
+def check_permission(module, level='view'):
+    u = get_user()
+    if not u: return False
+    # Super Admin sempre tem acesso total
+    if u['role'] == 'super_admin': return True
+    
+    perms = u.get('permissions', {})
+    user_level = perms.get(module, 'none')
+    
+    if level == 'admin':
+        return user_level == 'admin'
+    if level == 'view':
+        return user_level in ('view', 'admin')
+    return False
+
+def permission_required(module, level='view'):
+    def decorator(f):
+        @wraps(f)
+        def dec(*a,**k):
+            if not check_permission(module, level):
+                flash(f'Acesso negado: você não tem permissão de {level} para o módulo {module}.','error')
+                return redirect(url_for('dashboard'))
+            return f(*a,**k)
+        return dec
+    return decorator
+
+@app.context_processor
+def inject_permissions():
+    return dict(
+        check_permission=check_permission,
+        is_impersonating='impersonator_id' in session
+    )
+
 def get_user():
     user_id = session.get('user_id')
     if not user_id:
@@ -98,7 +138,13 @@ def get_user():
     db = get_db()
     u = db.execute('SELECT * FROM users WHERE id=?', (user_id,)).fetchone()
     db.close()
-    return u
+    if not u: return None
+    usr = dict(u)
+    try:
+        usr['permissions'] = json.loads(usr.get('permissions', '{}'))
+    except:
+        usr['permissions'] = {}
+    return usr
 
 @app.before_request
 def _local_debug_institucional_session():
@@ -227,34 +273,44 @@ def dashboard():
     db = get_db()
     d = {}
     
+    # Dashboard Modular: Os dados exibidos dependem das permissões ativas, não do Perfil.
     try:
-        if u['role'] == 'colaborador':
+        # Se tem permissão de Colaboradores, mostra contadores
+        if check_permission(u, 'colaboradores'):
+            if u['role'] == 'supervisor' and u['empresa']:
+                d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores WHERE empresa=?', (u['empresa'],)).fetchone()['c']
+            else:
+                d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
+        
+        # Se tem permissão de Agendamentos, mostra a agenda
+        if check_permission(u, 'agendamentos'):
+            if u['role'] == 'supervisor' and u['empresa']:
+                d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE c.empresa=?', (u['empresa'],)).fetchone()['c']
+                d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE c.empresa=? AND a.data_coleta=date('now') ORDER BY a.horario_coleta", (u['empresa'],)).fetchall()
+            else:
+                d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
+                d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta").fetchall()
+            
+            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
+
+        # Se tem permissão de Resultados
+        if check_permission(u, 'resultados'):
+            d['total_resultados'] = db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
+
+        # Se tem acesso a Admin Users
+        if check_permission(u, 'admin_users'):
+            d['total_users'] = db.execute('SELECT COUNT(*) as c FROM users').fetchone()['c']
+            d['users'] = db.execute('SELECT * FROM users ORDER BY created_at DESC LIMIT 5').fetchall()
+
+        # Dados específicos de Treinamento/Vídeo Aulas (perfil colaborador ou quem tem permissão)
+        if u['role'] == 'colaborador' or check_permission(u, 'treinamentos'):
             colab = db.execute('SELECT * FROM colaboradores WHERE email=?', (u['email'],)).fetchone()
             d['colab'] = colab
             d['videos'] = db.execute('SELECT * FROM video_aulas ORDER BY ordem').fetchall()
             d['avaliacoes'] = db.execute('SELECT * FROM avaliacoes WHERE active=1').fetchall()
             if colab:
                 d['tentativas'] = db.execute('SELECT * FROM avaliacao_tentativas WHERE colaborador_id=? ORDER BY completed_at DESC', (colab['id'],)).fetchall()
-        
-        elif u['role'] == 'supervisor':
-            d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
-            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-            d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta").fetchall()
-            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
-            
-        elif u['role'] in ['tecnico', 'tecnico_biocognitiva']:
-            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-            d['total_resultados'] = db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
-            d['agenda_hoje'] = db.execute("SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id WHERE a.data_coleta=date('now') ORDER BY a.horario_coleta").fetchall()
-            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
-            
-        elif u['role'] in ['adm_biocognitiva', 'administrador']:
-            d['total_users'] = db.execute('SELECT COUNT(*) as c FROM users').fetchone()['c']
-            d['total_colabs'] = db.execute('SELECT COUNT(*) as c FROM colaboradores').fetchone()['c']
-            d['total_agend'] = db.execute('SELECT COUNT(*) as c FROM agendamentos').fetchone()['c']
-            d['total_resultados'] = db.execute('SELECT COUNT(*) as c FROM resultados_exames').fetchone()['c']
-            d['users'] = db.execute('SELECT * FROM users ORDER BY created_at DESC LIMIT 5').fetchall()
-            d['agendamentos'] = db.execute('SELECT a.*, c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC LIMIT 10').fetchall()
+
     except Exception as e:
         print(f"Dashboard Data Fetch Error: {e}")
         d['error_msg'] = "Alguns dados não puderam ser carregados no momento."
@@ -264,7 +320,7 @@ def dashboard():
 
 @app.route('/export/<type>')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('relatorios', 'view')
 def export_csv(type):
     import io, csv
     from flask import Response
@@ -297,14 +353,21 @@ def export_csv(type):
 # === COLABORADORES CRUD ===
 @app.route('/colaboradores')
 @login_required
+@permission_required('colaboradores', 'view')
 def colaboradores():
     u=get_user(); db=get_db()
-    colabs=db.execute('SELECT * FROM colaboradores ORDER BY name').fetchall(); db.close()
+    # Se tem nível admin, vê todos. Se tem view e é supervisor, vê só da empresa.
+    is_admin = check_permission(u, 'colaboradores', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        colabs = db.execute('SELECT * FROM colaboradores WHERE empresa = ? ORDER BY name', (u['empresa'],)).fetchall()
+    else:
+        colabs = db.execute('SELECT * FROM colaboradores ORDER BY name').fetchall()
+    db.close()
     return render_template('colaboradores.html', user=u, colaboradores=colabs)
 
 @app.route('/colaborador/novo', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('colaboradores', 'admin')
 def colaborador_novo():
     u=get_user()
     if request.method=='POST':
@@ -342,7 +405,7 @@ def colaborador_novo():
 
 @app.route('/colaborador/<int:id>/editar', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('colaboradores', 'admin')
 def colaborador_editar(id):
     u=get_user(); db=get_db()
     colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
@@ -388,7 +451,7 @@ def colaborador_editar(id):
 
 @app.route('/colaborador/<int:id>/excluir')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('colaboradores', 'admin')
 def colaborador_excluir(id):
     u=get_user()
     db=get_db()
@@ -412,7 +475,7 @@ def colaborador_excluir(id):
 
 @app.route('/colaborador/<int:id>/duplicar')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('colaboradores', 'admin')
 def colaborador_duplicar(id):
     db=get_db()
     c=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
@@ -612,22 +675,9 @@ def bulk_action(action):
         flash('Nenhum item selecionado.', 'warning')
         return redirect(request.referrer or url_for('dashboard'))
 
-    BULK_PERMS = {
-        'colaborador': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'agendamento': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'treinamento': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'resultado': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
-        'relatorio': ('adm_biocognitiva', 'administrador'),
-        'servico': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'sorteio': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'falta': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
-        'controle_positivo': ('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador'),
-        'cliente': ('adm_biocognitiva', 'administrador'),
-        'subcontratada': ('supervisor', 'adm_biocognitiva', 'administrador'),
-        'financeiro': ('adm_biocognitiva', 'administrador'),
-    }
-    if entity not in BULK_PERMS or role not in BULK_PERMS[entity]:
-        flash('Sem permissão para esta ação em massa.', 'error')
+    # Validação Modular: Usa o check_permission para o módulo da entidade
+    if not check_permission(get_user(), entity, 'admin'):
+        flash(f'Você não tem permissão de administrador para o módulo {entity}.', 'error')
         return redirect(request.referrer or url_for('dashboard'))
 
     uid = get_user()['id']
@@ -711,7 +761,7 @@ def bulk_action(action):
 # === AUDITORIA ===
 @app.route('/auditoria')
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('auditoria', 'view')
 def auditoria():
     u=get_user(); db=get_db()
     
@@ -726,6 +776,11 @@ def auditoria():
     query = 'SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE 1=1'
     count_query = 'SELECT COUNT(*) as c FROM audit_log a JOIN users u ON a.user_id=u.id WHERE 1=1'
     params = []
+    
+    if u['role'] == 'supervisor':
+        query += ' AND u.empresa = ?'
+        count_query += ' AND u.empresa = ?'
+        params.append(u['empresa'])
     
     if entity_type:
         query += ' AND a.entity_type=?'
@@ -754,7 +809,7 @@ def auditoria():
 
 @app.route('/auditoria/detalhe/<int:log_id>')
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('auditoria', 'view')
 def auditoria_detalhe(log_id):
     u=get_user(); db=get_db()
     log = db.execute('SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE a.id=?', (log_id,)).fetchone()
@@ -777,15 +832,33 @@ def auditoria_detalhe(log_id):
 # === AGENDAMENTOS ===
 @app.route('/agendamentos')
 @login_required
+@permission_required('agendamentos', 'view')
 def agendamentos():
     u=get_user(); db=get_db()
-    agends=db.execute('SELECT a.*,c.name as colab_name FROM agendamentos a JOIN colaboradores c ON a.colaborador_id=c.id ORDER BY a.data_coleta DESC').fetchall()
-    colabs=db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall(); db.close()
+    is_admin = check_permission(u, 'agendamentos', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        agends = db.execute('''
+            SELECT a.*, c.name as colab_name 
+            FROM agendamentos a 
+            JOIN colaboradores c ON a.colaborador_id = c.id 
+            WHERE c.empresa = ?
+            ORDER BY a.data_coleta DESC
+        ''', (u['empresa'],)).fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE empresa = ? AND status="ativo"', (u['empresa'],)).fetchall()
+    else:
+        agends = db.execute('''
+            SELECT a.*, c.name as colab_name 
+            FROM agendamentos a 
+            JOIN colaboradores c ON a.colaborador_id = c.id 
+            ORDER BY a.data_coleta DESC
+        ''').fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall()
+    db.close()
     return render_template('agendamentos.html', user=u, agendamentos=agends, colaboradores=colabs)
 
 @app.route('/agendamento/novo', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('agendamentos', 'admin')
 def agendamento_novo():
     u=get_user()
     motivo=request.form.get('motivo','')
@@ -815,7 +888,7 @@ def agendamento_novo():
 
 @app.route('/agendamento/<int:id>/editar', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('agendamentos', 'admin')
 def agendamento_editar(id):
     u=get_user(); db=get_db()
     agend=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
@@ -843,7 +916,7 @@ def agendamento_editar(id):
 
 @app.route('/agendamento/<int:id>/excluir')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('agendamentos', 'admin')
 def agendamento_excluir(id):
     db=get_db()
     try:
@@ -860,7 +933,7 @@ def agendamento_excluir(id):
 
 @app.route('/agendamento/<int:id>/duplicar')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('agendamentos', 'admin')
 def agendamento_duplicar(id):
     db=get_db()
     a=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
@@ -878,15 +951,28 @@ def agendamento_duplicar(id):
 # === TREINAMENTOS ===
 @app.route('/treinamentos')
 @login_required
+@permission_required('treinamentos', 'view')
 def treinamentos():
     u=get_user(); db=get_db()
-    treins=db.execute('SELECT t.*,c.name as colab_name FROM treinamentos t LEFT JOIN colaboradores c ON t.colaborador_id=c.id ORDER BY t.data_treinamento DESC').fetchall()
-    colabs=db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall(); db.close()
+    is_admin = check_permission(u, 'treinamentos', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        treins = db.execute('''
+            SELECT t.*, c.name as colab_name 
+            FROM treinamentos t 
+            LEFT JOIN colaboradores c ON t.colaborador_id = c.id 
+            WHERE c.empresa = ?
+            ORDER BY t.data_treinamento DESC
+        ''', (u['empresa'],)).fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE empresa = ? AND status="ativo"', (u['empresa'],)).fetchall()
+    else:
+        treins = db.execute('SELECT t.*,c.name as colab_name FROM treinamentos t LEFT JOIN colaboradores c ON t.colaborador_id=c.id ORDER BY t.data_treinamento DESC').fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall()
+    db.close()
     return render_template('treinamentos.html', user=u, treinamentos=treins, colaboradores=colabs)
 
 @app.route('/treinamento/novo', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('treinamentos', 'admin')
 def treinamento_novo():
     u=get_user()
     arq=''
@@ -913,33 +999,52 @@ def treinamento_novo():
 # === RESULTADOS ===
 @app.route('/resultados')
 @login_required
+@permission_required('resultados', 'view')
 def resultados():
     u=get_user(); db=get_db()
     search=request.args.get('search','')
-    q=('SELECT r.*,c.name as colab_name, a.data_coleta AS agendamento_data_coleta '
-       'FROM resultados_exames r JOIN colaboradores c ON r.colaborador_id=c.id '
-       'LEFT JOIN agendamentos a ON r.agendamento_id=a.id '
-       "WHERE NOT (r.res_alcoolemia='pendente' AND r.res_urina='pendente' AND r.res_queratina='pendente' "
-       "AND r.foto_bafometro='' AND r.arquivo_urina='' AND r.arquivo_queratina='')")
-    if search: q+=f" AND (c.name LIKE '%{search}%' OR c.cpf LIKE '%{search}%')"
-    q+=' ORDER BY r.created_at DESC'
-    res=db.execute(q).fetchall()
+    params = []
+    
+    q_base = '''
+        FROM resultados_exames r 
+        JOIN colaboradores c ON r.colaborador_id=c.id 
+        LEFT JOIN agendamentos a ON r.agendamento_id=a.id 
+        WHERE ((r.agendamento_id IS NOT NULL) OR NOT (r.res_alcoolemia='pendente' AND r.res_urina='pendente' AND r.res_queratina='pendente' 
+        AND r.foto_bafometro='' AND r.arquivo_urina='' AND r.arquivo_queratina=''))
+    '''
+    
+    if u['role'] == 'supervisor':
+        q_base += ' AND c.empresa = ? '
+        params.append(u['empresa'])
+        
+    if search:
+        q_base += " AND (c.name LIKE ? OR c.cpf LIKE ?) "
+        params.extend([f'%{search}%', f'%{search}%'])
+        
+    res = db.execute('SELECT r.*, c.name as colab_name, a.data_coleta AS agendamento_data_coleta ' + q_base + ' ORDER BY r.created_at DESC', params).fetchall()
+
     # Agendamentos que ainda não possuem resultado vinculado
-    agendamentos_pendentes = db.execute('''
+    q_pend = '''
         SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
         FROM agendamentos a
         JOIN colaboradores c ON a.colaborador_id = c.id
         LEFT JOIN resultados_exames r ON a.id = r.agendamento_id
         WHERE r.id IS NULL
-        ORDER BY a.data_coleta DESC
-    ''').fetchall()
+    '''
+    p_pend = []
+    if u['role'] == 'supervisor':
+        q_pend += ' AND c.empresa = ? '
+        p_pend.append(u['empresa'])
+        
+    agendamentos_pendentes = db.execute(q_pend + ' ORDER BY a.data_coleta DESC', p_pend).fetchall()
+    
     db.close()
     return render_template('resultados.html', user=u, resultados=res, agendamentos_pendentes=agendamentos_pendentes, search=search)
 
-@app.route('/resultado/novo', methods=['POST'])
+@app.route('/resultado/upload', methods=['POST'])
 @login_required
-@role_required('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador', 'super_admin')
-def resultado_novo():
+@permission_required('resultados', 'admin')
+def resultado_upload():
     u=get_user(); db=get_db()
     foto_doador=foto_baf=foto_termo=foto_doc=arq_res=arq_urina=arq_queratina=''
     for field,sub in [('foto_doador','documents'),('foto_bafometro','documents'),('foto_termo','documents'),('foto_documento','documents'),('arquivo_resultado','documents'),('arquivo_urina','documents'),('arquivo_queratina','documents')]:
@@ -990,14 +1095,24 @@ def resultado_novo():
 # === RELATORIOS ===
 @app.route('/relatorios')
 @login_required
+@permission_required('relatorios', 'view')
 def relatorios():
     u=get_user(); db=get_db()
-    rels=db.execute('SELECT * FROM relatorios ORDER BY created_at DESC').fetchall(); db.close()
+    if u['role'] == 'supervisor':
+        rels=db.execute('''
+            SELECT r.* FROM relatorios r 
+            JOIN users u2 ON r.uploaded_by = u2.id 
+            WHERE u2.empresa = ? 
+            ORDER BY r.created_at DESC
+        ''', (u['empresa'],)).fetchall()
+    else:
+        rels=db.execute('SELECT * FROM relatorios ORDER BY created_at DESC').fetchall()
+    db.close()
     return render_template('relatorios.html', user=u, relatorios=rels)
 
 @app.route('/relatorio/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('relatorios', 'admin')
 def relatorio_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -1012,13 +1127,25 @@ def relatorio_upload():
 # === SERVICOS ===
 @app.route('/servicos')
 @login_required
+@permission_required('servicos', 'view')
 def servicos():
     u=get_user(); db=get_db()
-    servs=db.execute('SELECT s.*,u.name as solicitante FROM servicos s JOIN users u ON s.solicitado_por=u.id ORDER BY s.created_at DESC').fetchall(); db.close()
+    if u['role'] == 'supervisor':
+        servs=db.execute('''
+            SELECT s.*, u2.name as solicitante 
+            FROM servicos s 
+            JOIN users u2 ON s.solicitado_por = u2.id 
+            WHERE u2.empresa = ? 
+            ORDER BY s.created_at DESC
+        ''', (u['empresa'],)).fetchall()
+    else:
+        servs=db.execute('SELECT s.*,u.name as solicitante FROM servicos s JOIN users u ON s.solicitado_por=u.id ORDER BY s.created_at DESC').fetchall()
+    db.close()
     return render_template('servicos.html', user=u, servicos=servs)
 
 @app.route('/servico/novo', methods=['POST'])
 @login_required
+@permission_required('servicos', 'admin')
 def servico_novo():
     u=get_user(); doc=''
     if 'documento' in request.files and request.files['documento'].filename:
@@ -1079,19 +1206,34 @@ def avaliacao_submit(av_id):
 @app.route('/video-aulas')
 @login_required
 def video_aulas():
-    u=get_user(); db=get_db()
+    # Vídeo aulas são visíveis para colaboradores ou quem tem permissão de treinamentos
+    u=get_user()
+    if u['role'] != 'colaborador' and not check_permission('treinamentos', 'view'):
+        flash('Acesso negado.', 'error')
+        return redirect(url_for('dashboard'))
+        
+    db=get_db()
     videos=db.execute('SELECT * FROM video_aulas ORDER BY ordem').fetchall(); db.close()
     return render_template('video_aulas.html', user=u, videos=videos)
 
 # === SORTEIO ===
-@app.route('/sorteio', methods=['GET','POST'])
+@app.route('/sorteio', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('sorteio', 'view')
 def sorteio():
     u=get_user(); db=get_db()
     if request.method=='POST':
+        # Permissão total necessária para realizar novo sorteio
+        if not check_permission('sorteio', 'admin'):
+            flash('Você não tem permissão para realizar novos sorteios.', 'error')
+            return redirect(url_for('sorteio'))
+            
         qtd=int(request.form.get('quantidade',1))
-        colabs=db.execute('SELECT id,name,cpf FROM colaboradores WHERE status="ativo"').fetchall()
+        if u['role'] == 'supervisor':
+            colabs=db.execute('SELECT id,name,cpf FROM colaboradores WHERE status="ativo" AND empresa=?', (u['empresa'],)).fetchall()
+        else:
+            colabs=db.execute('SELECT id,name,cpf FROM colaboradores WHERE status="ativo"').fetchall()
+            
         lst=[dict(c) for c in colabs]
         sel=random.sample(lst,min(qtd,len(lst))) if lst else []
         db.execute('INSERT INTO sorteios (titulo,quantidade,colaboradores_sorteados,realizado_por) VALUES (?,?,?,?)',
@@ -1099,20 +1241,42 @@ def sorteio():
         db.commit()
         names=', '.join(s['name'] for s in sel)
         flash(f'Sorteados: {names}','success')
-    sorts=db.execute('SELECT * FROM sorteios ORDER BY created_at DESC').fetchall(); db.close()
+        
+    if u['role'] == 'supervisor':
+        sorts=db.execute('''
+            SELECT s.* FROM sorteios s 
+            JOIN users u2 ON s.realizado_por = u2.id 
+            WHERE u2.empresa = ? 
+            ORDER BY s.created_at DESC
+        ''', (u['empresa'],)).fetchall()
+    else:
+        sorts=db.execute('SELECT * FROM sorteios ORDER BY created_at DESC').fetchall()
+        
+    db.close()
     return render_template('sorteio.html', user=u, sorteios=sorts)
 
 # === INSTITUCIONAL ===
 @app.route('/institucional')
 @login_required
+@permission_required('institucional', 'view')
 def institucional():
     u=get_user(); db=get_db()
-    docs=db.execute('SELECT * FROM institutional_docs ORDER BY created_at DESC').fetchall(); db.close()
+    if u['role'] == 'supervisor':
+        # Documentos globais ou enviados por alguém da mesma empresa
+        docs=db.execute('''
+            SELECT d.* FROM institutional_docs d 
+            JOIN users u2 ON d.uploaded_by = u2.id 
+            WHERE u2.empresa = ? OR u2.role IN ('administrador', 'super_admin')
+            ORDER BY d.created_at DESC
+        ''', (u['empresa'],)).fetchall()
+    else:
+        docs=db.execute('SELECT * FROM institutional_docs ORDER BY created_at DESC').fetchall()
+    db.close()
     return render_template('institucional.html', user=u, docs=docs)
 
 @app.route('/institucional/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('institucional', 'admin')
 def institucional_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -1126,7 +1290,7 @@ def institucional_upload():
 
 @app.route('/institucional/<int:id>/edit', methods=['GET','POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('institucional', 'admin')
 def institucional_edit(id):
     u = get_user(); db = get_db()
     d = db.execute('SELECT * FROM institutional_docs WHERE id=?',(id,)).fetchone()
@@ -1150,9 +1314,9 @@ def institucional_edit(id):
     db.close()
     return render_template('institucional_form.html', user=u, doc=d)
 
-@app.route('/institucional/<int:id>/excluir')
+@app.route('/institucional/excluir/<int:id>')
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('institucional', 'admin')
 def institucional_excluir(id):
     db = get_db()
     row = db.execute('SELECT filename FROM institutional_docs WHERE id=?',(id,)).fetchone()
@@ -1165,15 +1329,20 @@ def institucional_excluir(id):
 # === FINANCEIRO ===
 @app.route('/financeiro')
 @login_required
-@role_required('supervisor','tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('financeiro', 'view')
 def financeiro():
     u=get_user(); db=get_db()
-    docs=db.execute('SELECT * FROM financeiro ORDER BY created_at DESC').fetchall(); db.close()
+    is_admin = check_permission(u, 'financeiro', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        docs=db.execute('SELECT * FROM financeiro WHERE empresa_devedora = ? ORDER BY created_at DESC', (u['empresa'],)).fetchall()
+    else:
+        docs=db.execute('SELECT * FROM financeiro ORDER BY created_at DESC').fetchall()
+    db.close()
     return render_template('financeiro.html', user=u, docs=docs)
 
 @app.route('/financeiro/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('financeiro', 'admin')
 def financeiro_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -1188,25 +1357,42 @@ def financeiro_upload():
 # === FALTAS (Técnico) ===
 @app.route('/faltas')
 @login_required
-@role_required('tecnico', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('faltas', 'view')
 def faltas():
     u = get_user(); db = get_db()
-    fs = db.execute('SELECT f.*, c.name as colab_name FROM faltas f JOIN colaboradores c ON f.colaborador_id = c.id ORDER BY f.data_falta DESC').fetchall()
-    colabs = db.execute('SELECT id, name FROM colaboradores WHERE status="ativo"').fetchall()
-    # Agendamentos pendentes para vincular
-    agendamentos = db.execute('''
-        SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
-        FROM agendamentos a 
-        JOIN colaboradores c ON a.colaborador_id = c.id 
-        WHERE (a.st_urina = 'agendado' OR a.st_queratina = 'agendado' OR a.st_alcoolemia = 'agendado')
-        ORDER BY a.data_coleta DESC
-    ''').fetchall()
+    is_admin = check_permission(u, 'faltas', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        fs = db.execute('''
+            SELECT f.*, c.name as colab_name 
+            FROM faltas f 
+            JOIN colaboradores c ON f.colaborador_id = c.id 
+            WHERE c.empresa = ?
+            ORDER BY f.data_falta DESC
+        ''', (u['empresa'],)).fetchall()
+        colabs = db.execute('SELECT id, name FROM colaboradores WHERE empresa = ? AND status="ativo"', (u['empresa'],)).fetchall()
+        agendamentos = db.execute('''
+            SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
+            FROM agendamentos a 
+            JOIN colaboradores c ON a.colaborador_id = c.id 
+            WHERE c.empresa = ? AND (a.st_urina = 'agendado' OR a.st_queratina = 'agendado' OR a.st_alcoolemia = 'agendado')
+            ORDER BY a.data_coleta DESC
+        ''', (u['empresa'],)).fetchall()
+    else:
+        fs = db.execute('SELECT f.*, c.name as colab_name FROM faltas f JOIN colaboradores c ON f.colaborador_id = c.id ORDER BY f.data_falta DESC').fetchall()
+        colabs = db.execute('SELECT id, name FROM colaboradores WHERE status="ativo"').fetchall()
+        agendamentos = db.execute('''
+            SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
+            FROM agendamentos a 
+            JOIN colaboradores c ON a.colaborador_id = c.id 
+            WHERE (a.st_urina = 'agendado' OR a.st_queratina = 'agendado' OR a.st_alcoolemia = 'agendado')
+            ORDER BY a.data_coleta DESC
+        ''').fetchall()
     db.close()
     return render_template('faltas.html', user=u, faltas=fs, colaboradores=colabs, agendamentos=agendamentos)
 
 @app.route('/falta/nova', methods=['POST'])
 @login_required
-@role_required('tecnico', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('faltas', 'admin')
 def falta_nova():
     u = get_user(); db = get_db()
     colab_id = request.form['colaborador_id']
@@ -1230,16 +1416,33 @@ def falta_nova():
 # === CONTROLE POSITIVO (Técnico) ===
 @app.route('/controle-positivo')
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('controle_positivo', 'view')
 def controle_positivo():
     u=get_user(); db=get_db()
-    cps=db.execute('SELECT cp.*,c.name as colab_name FROM controle_positivo cp JOIN colaboradores c ON cp.colaborador_id=c.id ORDER BY cp.created_at DESC').fetchall()
-    colabs=db.execute('SELECT id,name FROM colaboradores').fetchall(); db.close()
+    is_admin = check_permission(u, 'controle_positivo', 'admin')
+    if u['role'] == 'supervisor' and not is_admin:
+        cps = db.execute('''
+            SELECT cp.*, c.name as colab_name 
+            FROM controle_positivo cp 
+            JOIN colaboradores c ON cp.colaborador_id = c.id 
+            WHERE c.empresa = ?
+            ORDER BY cp.created_at DESC
+        ''', (u['empresa'],)).fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE empresa = ? AND status="ativo"', (u['empresa'],)).fetchall()
+    else:
+        cps = db.execute('''
+            SELECT cp.*, c.name as colab_name 
+            FROM controle_positivo cp 
+            JOIN colaboradores c ON cp.colaborador_id = c.id 
+            ORDER BY cp.created_at DESC
+        ''').fetchall()
+        colabs = db.execute('SELECT id,name FROM colaboradores WHERE status="ativo"').fetchall()
+    db.close()
     return render_template('controle_positivo.html', user=u, controles=cps, colaboradores=colabs)
 
 @app.route('/controle-positivo/novo', methods=['POST'])
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('controle_positivo', 'admin')
 def controle_positivo_novo():
     u=get_user()
     tipo=request.form.get('tipo_evento','positivo_amostra')
@@ -1265,7 +1468,7 @@ def controle_positivo_novo():
 
 @app.route('/treinamento/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('treinamentos', 'admin')
 def treinamento_editar(id):
     u = get_user()
     db = get_db()
@@ -1313,7 +1516,7 @@ def treinamento_editar(id):
 
 @app.route('/treinamento/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('treinamentos', 'admin')
 def treinamento_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'treinamento', id, get_user()['id'])
@@ -1325,7 +1528,7 @@ def treinamento_duplicar(id):
 
 @app.route('/treinamento/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('treinamentos', 'admin')
 def treinamento_excluir(id):
     db = get_db()
     try:
@@ -1363,7 +1566,7 @@ def resultado_ver(id):
 
 @app.route('/resultado/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('resultados', 'admin')
 def resultado_editar(id):
     u = get_user()
     db = get_db()
@@ -1447,7 +1650,7 @@ def resultado_editar(id):
 
 @app.route('/resultado/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('resultados', 'admin')
 def resultado_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'resultado', id, get_user()['id'])
@@ -1459,7 +1662,7 @@ def resultado_duplicar(id):
 
 @app.route('/resultado/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('resultados', 'admin')
 def resultado_excluir(id):
     db = get_db()
     try:
@@ -1503,7 +1706,7 @@ def resultado_excluir(id):
 
 @app.route('/relatorio/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('relatorios', 'admin')
 def relatorio_editar(id):
     u = get_user()
     db = get_db()
@@ -1532,7 +1735,7 @@ def relatorio_editar(id):
 
 @app.route('/relatorio/<int:id>/duplicar')
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('relatorios', 'admin')
 def relatorio_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'relatorio', id, get_user()['id'])
@@ -1544,7 +1747,7 @@ def relatorio_duplicar(id):
 
 @app.route('/relatorio/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('relatorios', 'admin')
 def relatorio_excluir(id):
     db = get_db()
     row = db.execute('SELECT filename FROM relatorios WHERE id=?', (id,)).fetchone()
@@ -1559,7 +1762,7 @@ def relatorio_excluir(id):
 
 @app.route('/servico/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('servicos', 'admin')
 def servico_editar(id):
     u = get_user()
     db = get_db()
@@ -1594,7 +1797,7 @@ def servico_editar(id):
 
 @app.route('/servico/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('servicos', 'admin')
 def servico_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'servico', id, get_user()['id'])
@@ -1606,7 +1809,7 @@ def servico_duplicar(id):
 
 @app.route('/servico/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('servicos', 'admin')
 def servico_excluir(id):
     db = get_db()
     s = db.execute('SELECT documento_anexo,documento_resposta FROM servicos WHERE id=?', (id,)).fetchone()
@@ -1622,7 +1825,7 @@ def servico_excluir(id):
 
 @app.route('/sorteio/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('sorteio', 'admin')
 def sorteio_editar(id):
     u = get_user()
     db = get_db()
@@ -1646,7 +1849,7 @@ def sorteio_editar(id):
 
 @app.route('/sorteio/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('sorteio', 'admin')
 def sorteio_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'sorteio', id, get_user()['id'])
@@ -1658,7 +1861,7 @@ def sorteio_duplicar(id):
 
 @app.route('/sorteio/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('sorteio', 'admin')
 def sorteio_excluir(id):
     db = get_db()
     db.execute('DELETE FROM sorteios WHERE id=?', (id,))
@@ -1670,7 +1873,7 @@ def sorteio_excluir(id):
 
 @app.route('/falta/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('faltas', 'admin')
 def falta_editar(id):
     u = get_user()
     db = get_db()
@@ -1699,7 +1902,7 @@ def falta_editar(id):
 
 @app.route('/falta/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('faltas', 'admin')
 def falta_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'falta', id, get_user()['id'])
@@ -1711,7 +1914,7 @@ def falta_duplicar(id):
 
 @app.route('/falta/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('faltas', 'admin')
 def falta_excluir(id):
     db = get_db()
     db.execute('DELETE FROM faltas WHERE id=?', (id,))
@@ -1723,7 +1926,7 @@ def falta_excluir(id):
 
 @app.route('/controle-positivo/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('controle_positivo', 'admin')
 def controle_positivo_editar(id):
     u = get_user()
     db = get_db()
@@ -1768,7 +1971,7 @@ def controle_positivo_editar(id):
 
 @app.route('/controle-positivo/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('controle_positivo', 'admin')
 def controle_positivo_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'controle_positivo', id, get_user()['id'])
@@ -1780,7 +1983,7 @@ def controle_positivo_duplicar(id):
 
 @app.route('/controle-positivo/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('controle_positivo', 'admin')
 def controle_positivo_excluir(id):
     db = get_db()
     cp = db.execute('SELECT arquivo_resultado FROM controle_positivo WHERE id=?', (id,)).fetchone()
@@ -1795,7 +1998,7 @@ def controle_positivo_excluir(id):
 
 @app.route('/cliente/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('clientes', 'admin')
 def cliente_editar(id):
     u = get_user()
     db = get_db()
@@ -1835,7 +2038,7 @@ def cliente_editar(id):
 
 @app.route('/cliente/<int:id>/duplicar')
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('clientes', 'admin')
 def cliente_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'cliente', id, get_user()['id'])
@@ -1847,7 +2050,7 @@ def cliente_duplicar(id):
 
 @app.route('/cliente/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('clientes', 'admin')
 def cliente_excluir(id):
     db = get_db()
     db.execute('DELETE FROM clientes_empresa WHERE id=?', (id,))
@@ -1859,7 +2062,7 @@ def cliente_excluir(id):
 
 @app.route('/subcontratada/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('subcontratadas', 'admin')
 def subcontratada_editar(id):
     u = get_user()
     db = get_db()
@@ -1899,7 +2102,7 @@ def subcontratada_editar(id):
 
 @app.route('/subcontratada/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('subcontratadas', 'admin')
 def subcontratada_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'subcontratada', id, get_user()['id'])
@@ -1911,7 +2114,7 @@ def subcontratada_duplicar(id):
 
 @app.route('/subcontratada/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('subcontratadas', 'admin')
 def subcontratada_excluir(id):
     db = get_db()
     db.execute('DELETE FROM subcontratadas WHERE id=?', (id,))
@@ -1923,7 +2126,7 @@ def subcontratada_excluir(id):
 
 @app.route('/financeiro/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('financeiro', 'admin')
 def financeiro_editar(id):
     u = get_user()
     db = get_db()
@@ -1960,7 +2163,7 @@ def financeiro_editar(id):
 
 @app.route('/financeiro/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('financeiro', 'admin')
 def financeiro_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'financeiro', id, get_user()['id'])
@@ -1972,7 +2175,7 @@ def financeiro_duplicar(id):
 
 @app.route('/financeiro/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador', 'super_admin')
+@permission_required('financeiro', 'admin')
 def financeiro_excluir(id):
     db = get_db()
     row = db.execute('SELECT filename FROM financeiro WHERE id=?', (id,)).fetchone()
@@ -1985,12 +2188,17 @@ def financeiro_excluir(id):
     return redirect(url_for('financeiro'))
 
 
-@app.route('/clientes', methods=['GET','POST'])
+@app.route('/clientes', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('clientes', 'view')
 def clientes():
     u=get_user(); db=get_db()
     if request.method=='POST':
+        # Permissão total necessária para cadastrar cliente
+        if not check_permission('clientes', 'admin'):
+            flash('Você não tem permissão para cadastrar novos clientes.', 'error')
+            return redirect(url_for('clientes'))
+            
         rs=request.form.get('razao_social','').strip()
         if not rs:
             flash('Razão social é obrigatória.','error')
@@ -2003,17 +2211,27 @@ def clientes():
                  request.form.get('telefone','').strip(),request.form.get('email','').strip(),
                  request.form.get('observacao','').strip(),u['id']),
             )
-            db.commit(); flash('Cliente cadastrado!','success')
-    rows=db.execute('SELECT * FROM clientes_empresa ORDER BY razao_social').fetchall(); db.close()
+            db.commit(); flash('Cliente registrado!','success')
+            
+    if u['role'] == 'supervisor':
+        rows=db.execute('SELECT * FROM clientes_empresa WHERE razao_social = ? OR nome_fantasia = ? ORDER BY razao_social', (u['empresa'], u['empresa'])).fetchall()
+    else:
+        rows=db.execute('SELECT * FROM clientes_empresa ORDER BY razao_social').fetchall()
+    db.close()
     return render_template('clientes.html', user=u, clientes=rows)
 
 
-@app.route('/subcontratadas', methods=['GET','POST'])
+@app.route('/subcontratadas', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
+@permission_required('subcontratadas', 'view')
 def subcontratadas():
     u=get_user(); db=get_db()
     if request.method=='POST':
+        # Permissão total necessária para cadastrar subcontratada
+        if not check_permission('subcontratadas', 'admin'):
+            flash('Você não tem permissão para cadastrar novas subcontratadas.', 'error')
+            return redirect(url_for('subcontratadas'))
+            
         nf=request.form.get('nome_fantasia','').strip()
         if not nf:
             flash('Nome fantasia é obrigatório.','error')
@@ -2024,16 +2242,21 @@ def subcontratadas():
                 (nf,request.form.get('razao_social','').strip(),request.form.get('cnpj','').strip(),
                  request.form.get('contato_nome','').strip(),request.form.get('telefone','').strip(),
                  request.form.get('email','').strip(),request.form.get('observacao','').strip(),
-                 request.form.get('empresa_matriz','').strip(),u['id']),
+                 u['empresa'] if u['role']=='supervisor' else request.form.get('empresa_matriz',''),u['id']),
             )
-            db.commit(); flash('Subcontratada cadastrada!','success')
-    rows=db.execute('SELECT * FROM subcontratadas ORDER BY nome_fantasia').fetchall(); db.close()
-    return render_template('subcontratadas.html', user=u, subcontratadas=rows)
+            db.commit(); flash('Subcontratada registrada!','success')
+            
+    if u['role'] == 'supervisor':
+        subs=db.execute('SELECT * FROM subcontratadas WHERE empresa_matriz = ? ORDER BY nome_fantasia', (u['empresa'],)).fetchall()
+    else:
+        subs=db.execute('SELECT * FROM subcontratadas ORDER BY nome_fantasia').fetchall()
+    db.close()
+    return render_template('subcontratadas.html', user=u, subcontratadas=subs)
 
 
 @app.route('/estoque-kits')
 @login_required
-@role_required('adm_biocognitiva','administrador', 'super_admin')
+@permission_required('estoque_kits', 'view')
 def estoque_kits():
     u=get_user()
     return render_template('estoque_kits.html', user=u)
@@ -2042,15 +2265,19 @@ def estoque_kits():
 # === ADMIN USERS ===
 @app.route('/admin/users')
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'view')
 def admin_users():
     u=get_user(); db=get_db()
-    users=db.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall(); db.close()
+    if u['role'] == 'supervisor':
+        users=db.execute('SELECT * FROM users WHERE empresa = ? ORDER BY created_at DESC', (u['empresa'],)).fetchall()
+    else:
+        users=db.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall()
+    db.close()
     return render_template('admin_users.html', user=u, users=users)
 
 @app.route('/admin/user/<int:uid>/toggle', methods=['POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'admin')
 def toggle_user(uid):
     u = get_user()
     db=get_db()
@@ -2069,7 +2296,7 @@ def toggle_user(uid):
 
 @app.route('/admin/user/new', methods=['GET', 'POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'admin')
 def create_user():
     u = get_user()
     if request.method == 'POST':
@@ -2077,31 +2304,42 @@ def create_user():
         email = request.form.get('email')
         password = request.form.get('password')
         role = request.form.get('role')
+        
+        # Regra de segurança: Apenas super_admin pode criar outro super_admin
+        if role == 'super_admin' and u['role'] != 'super_admin':
+            flash('Acesso negado: Somente um Super Admin pode criar outro Super Admin.', 'danger')
+            return redirect(url_for('admin_users'))
+
         cpf = request.form.get('cpf', '')
         phone = request.form.get('phone', '')
         address = request.form.get('address', '')
-        funcao = request.form.get('funcao', '')
-        data_admissao = request.form.get('data_admissao', '')
-        empresa = request.form.get('empresa', '')
-
-        if not name or not email or not password or not role:
-            flash('Todos os campos obrigatórios devem ser preenchidos.', 'danger')
-            return redirect(url_for('create_user'))
-
+        
+        # Default permissions based on role
+        perms = {}
+        if role == 'super_admin':
+            for mod in ALL_MODULES_KEYS: perms[mod] = 'admin'
+        elif role in ('administrador', 'adm_biocognitiva'):
+            for mod in ALL_MODULES_KEYS: perms[mod] = 'admin'
+        elif role == 'supervisor':
+            for mod in ('institucional', 'colaboradores', 'agendamentos', 'resultados', 'treinamentos', 'relatorios', 'servicos', 'sorteio', 'subcontratadas', 'controle_positivo', 'faltas'):
+                perms[mod] = 'admin'
+        elif role == 'tecnico':
+            for mod in ('agendamentos', 'resultados', 'faltas', 'controle_positivo', 'estoque_kits'):
+                perms[mod] = 'admin'
+        
         db = get_db()
         try:
-            password_hash = generate_password_hash(password)
-            cursor = db.execute('''INSERT INTO users (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                       (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa))
-            db.commit()
+            cursor = db.execute(
+                '''INSERT INTO users (name, email, password_hash, role, cpf, phone, address, empresa, permissions) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (name, email, generate_password_hash(password), role, cpf, phone, address, 
+                 u['empresa'] if u['role']=='supervisor' else request.form.get('empresa_matriz',''),
+                 json.dumps(perms))
+            )
             new_id = cursor.lastrowid
+            db.commit()
             
-            new_values = {
-                'name': name, 'email': email, 'role': role, 'cpf': cpf, 'phone': phone,
-                'address': address, 'funcao': funcao, 'data_admissao': data_admissao, 'empresa': empresa
-            }
-            log_audit(u['id'], 'CREATE', 'users', new_id, old_values={}, new_values=new_values, db=db)
+            log_audit(u['id'], 'CREATE', 'users', new_id, old_values={}, new_values={'name': name, 'email': email, 'role': role}, db=db)
             
             flash('Usuário criado com sucesso!', 'success')
             return redirect(url_for('admin_users'))
@@ -2109,11 +2347,81 @@ def create_user():
             flash('Email já cadastrado.', 'danger')
         finally:
             db.close()
-    return render_template('user_form.html', user=u, action='create')
+    
+    modules = [
+        ('institucional', 'Institucional'),
+        ('colaboradores', 'Colaboradores'),
+        ('agendamentos', 'Agendamentos'),
+        ('resultados', 'Resultados'),
+        ('financeiro', 'Financeiro'),
+        ('relatorios', 'Relatórios'),
+        ('servicos', 'Serviços'),
+        ('treinamentos', 'Treinamentos'),
+        ('faltas', 'Faltas'),
+        ('sorteio', 'Sorteio'),
+        ('subcontratadas', 'Subcontratadas'),
+        ('controle_positivo', 'Eventos Impeditivos'),
+        ('clientes', 'Cadastro de Clientes'),
+        ('estoque_kits', 'Estoque de Kits'),
+        ('settings', 'Configurações do Sistema'),
+        ('auditoria', 'Auditoria do Sistema'),
+        ('admin_users', 'Gestão de Usuários')
+    ]
+    return render_template('user_form.html', user=u, action='create', modules=modules)
+
+@app.route('/admin/user/<int:uid>/impersonate')
+@login_required
+@permission_required('admin_users', 'admin')
+def impersonate_user(uid):
+    u = get_user()
+    db = get_db()
+    target = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    db.close()
+    
+    if not target:
+        flash('Usuário não encontrado.', 'error')
+        return redirect(url_for('admin_users'))
+        
+    if target['id'] == u['id']:
+        flash('Você não pode inspecionar a si mesmo.', 'warning')
+        return redirect(url_for('admin_users'))
+        
+    # Store original admin ID
+    if 'impersonator_id' not in session:
+        session['impersonator_id'] = u['id']
+        
+    session['user_id'] = target['id']
+    session['role'] = target['role']
+    session['name'] = target['name']
+    
+    flash(f'Você agora está inspecionando como {target["name"]}.', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin/stop-impersonation')
+@login_required
+def stop_impersonation():
+    if 'impersonator_id' not in session:
+        return redirect(url_for('dashboard'))
+        
+    orig_id = session.pop('impersonator_id')
+    db = get_db()
+    orig = db.execute('SELECT * FROM users WHERE id=?', (orig_id,)).fetchone()
+    db.close()
+    
+    if orig:
+        session['user_id'] = orig['id']
+        session['role'] = orig['role']
+        session['name'] = orig['name']
+        flash('Inspeção finalizada. Você retornou ao seu perfil original.', 'success')
+    else:
+        session.clear()
+        return redirect(url_for('login'))
+        
+    return redirect(url_for('admin_users'))
 
 @app.route('/admin/user/<int:uid>/edit', methods=['GET', 'POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'admin')
 def edit_user(uid):
     u = get_user()
     db = get_db()
@@ -2123,6 +2431,39 @@ def edit_user(uid):
         db.close()
         flash('Usuário não encontrado.', 'danger')
         return redirect(url_for('admin_users'))
+    
+    target_usr = dict(usr)
+    
+    # Regra de segurança: Apenas super_admin pode editar outro super_admin
+    if target_usr['role'] == 'super_admin' and u['role'] != 'super_admin':
+        flash('Acesso negado: Somente um Super Admin pode editar outro Super Admin.', 'danger')
+        db.close()
+        return redirect(url_for('admin_users'))
+
+    try:
+        target_usr['permissions'] = json.loads(target_usr.get('permissions', '{}'))
+    except:
+        target_usr['permissions'] = {}
+    
+    modules = [
+        ('institucional', 'Institucional'),
+        ('colaboradores', 'Colaboradores'),
+        ('agendamentos', 'Agendamentos'),
+        ('resultados', 'Resultados'),
+        ('financeiro', 'Financeiro'),
+        ('relatorios', 'Relatórios'),
+        ('servicos', 'Serviços'),
+        ('treinamentos', 'Treinamentos'),
+        ('faltas', 'Faltas'),
+        ('sorteio', 'Sorteio'),
+        ('subcontratadas', 'Subcontratadas'),
+        ('controle_positivo', 'Eventos Impeditivos'),
+        ('clientes', 'Cadastro de Clientes'),
+        ('estoque_kits', 'Estoque de Kits'),
+        ('settings', 'Configurações do Sistema'),
+        ('auditoria', 'Auditoria do Sistema'),
+        ('admin_users', 'Gestão de Usuários')
+    ]
 
     if request.method == 'POST':
         name = request.form.get('name')
@@ -2141,17 +2482,28 @@ def edit_user(uid):
             flash('Nome, Email e Perfil são obrigatórios.', 'danger')
             return redirect(url_for('edit_user', uid=uid))
 
+        # Regra de segurança: Apenas super_admin pode promover para super_admin
+        if role == 'super_admin' and u['role'] != 'super_admin':
+            flash('Acesso negado: Somente um Super Admin pode promover usuários para este perfil.', 'danger')
+            return redirect(url_for('edit_user', uid=uid))
+
+        permissions_dict = {}
+        for key in request.form:
+            if key.startswith('perm_'):
+                permissions_dict[key.replace('perm_', '')] = request.form[key]
+        permissions_json = json.dumps(permissions_dict)
+
         try:
             old_values = dict(usr)
             if password:
                 password_hash = generate_password_hash(password)
-                db.execute('''UPDATE users SET name=?, email=?, password_hash=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, updated_at=CURRENT_TIMESTAMP
+                db.execute('''UPDATE users SET name=?, email=?, password_hash=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, permissions=?, updated_at=CURRENT_TIMESTAMP
                               WHERE id=?''',
-                           (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa, active, uid))
+                           (name, email, password_hash, role, cpf, phone, address, funcao, data_admissao, empresa, active, permissions_json, uid))
             else:
-                db.execute('''UPDATE users SET name=?, email=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, updated_at=CURRENT_TIMESTAMP
+                db.execute('''UPDATE users SET name=?, email=?, role=?, cpf=?, phone=?, address=?, funcao=?, data_admissao=?, empresa=?, active=?, permissions=?, updated_at=CURRENT_TIMESTAMP
                               WHERE id=?''',
-                           (name, email, role, cpf, phone, address, funcao, data_admissao, empresa, active, uid))
+                           (name, email, role, cpf, phone, address, funcao, data_admissao, empresa, active, permissions_json, uid))
             
             db.commit()
             
@@ -2171,11 +2523,11 @@ def edit_user(uid):
             db.close()
             
     db.close()
-    return render_template('user_form.html', user=u, action='edit', target_user=usr)
+    return render_template('user_form.html', user=u, action='edit', target_user=target_usr, modules=modules)
 
 @app.route('/admin/user/<int:uid>/delete', methods=['POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'admin')
 def delete_user(uid):
     u = get_user()
     if uid == u['id']:
@@ -2195,7 +2547,7 @@ def delete_user(uid):
 
 @app.route('/admin/users/delete_batch', methods=['POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('admin_users', 'admin')
 def delete_users_batch():
     u = get_user()
     user_ids = request.form.getlist('user_ids')
@@ -2224,7 +2576,7 @@ def delete_users_batch():
 # === SETTINGS ===
 @app.route('/settings', methods=['GET','POST'])
 @login_required
-@role_required('administrador', 'super_admin')
+@permission_required('settings', 'view')
 def settings():
     u=get_user(); db=get_db()
     if request.method=='POST':
@@ -2241,7 +2593,7 @@ if not os.path.exists(BACKUP_DIR): os.makedirs(BACKUP_DIR)
 
 @app.route('/superadmin')
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin():
     u = get_user(); db = get_db()
     
@@ -2269,7 +2621,7 @@ def superadmin():
 
 @app.route('/superadmin/backup/create', methods=['POST'])
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin_backup_create():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     backup_file = f'biocognitiva_backup_{timestamp}.db'
@@ -2280,13 +2632,13 @@ def superadmin_backup_create():
 
 @app.route('/superadmin/backup/download/<filename>')
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin_backup_download(filename):
     return send_from_directory(BACKUP_DIR, filename, as_attachment=True)
 
 @app.route('/superadmin/backup/delete/<filename>')
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin_backup_delete(filename):
     path = os.path.join(BACKUP_DIR, filename)
     if os.path.exists(path):
@@ -2296,7 +2648,7 @@ def superadmin_backup_delete(filename):
 
 @app.route('/superadmin/backup/restore/<filename>', methods=['POST'])
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin_backup_restore(filename):
     path = os.path.join(BACKUP_DIR, filename)
     if os.path.exists(path):
@@ -2314,7 +2666,7 @@ def superadmin_backup_restore(filename):
 
 @app.route('/superadmin/user/create', methods=['POST'])
 @login_required
-@role_required('super_admin')
+@permission_required('admin_users', 'admin')
 def superadmin_user_create():
     name = request.form.get('name')
     email = request.form.get('email')
@@ -2341,7 +2693,7 @@ def superadmin_user_create():
 
 @app.route('/superadmin/backup/settings', methods=['POST'])
 @login_required
-@role_required('super_admin')
+@permission_required('settings', 'admin')
 def superadmin_backup_settings():
     enabled = request.form.get('backup_auto_enabled', '0')
     freq = request.form.get('backup_frequency', 'daily')
