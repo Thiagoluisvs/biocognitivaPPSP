@@ -10,11 +10,53 @@
 <div class="grid-2">
 <div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Registrar Falta</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('falta_nova') }}">
-    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label>Data da Falta *</label><input type="date" name="data_falta" class="form-input" required></div>
-    <div class="form-group"><label>Observação (Opcional)</label><input type="text" name="observacao" class="form-input"></div>
+    <div class="form-group">
+        <label>Vincular Agendamento (Opcional)</label>
+        <select name="agendamento_id" id="agendamento_select" class="form-select" onchange="syncAgendamento(this)">
+            <option value="">-- Selecione um agendamento --</option>
+            {% for a in agendamentos %}
+            <option value="{{ a.id }}" data-colab="{{ a.colaborador_id }}" data-date="{{ a.data_coleta }}">
+                {{ a.data_coleta }} {{ a.horario_coleta }} - {{ a.colab_name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Colaborador *</label>
+        <select name="colaborador_id" id="colaborador_select" class="form-select" required>
+            <option value="">-- Selecione --</option>
+            {% for c in colaboradores %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Data da Falta *</label>
+        <input type="date" name="data_falta" id="data_falta_input" class="form-input" required>
+    </div>
+    <div class="form-group">
+        <label>Observação (Opcional)</label>
+        <input type="text" name="observacao" class="form-input" placeholder="Ex: Motivo da ausência">
+    </div>
     <button type="submit" class="btn btn-danger"><i class="fas fa-user-times"></i> Registrar Falta</button>
-</form></div></div>
+</form>
+
+<script>
+function syncAgendamento(select) {
+    const option = select.options[select.selectedIndex];
+    if (option.value) {
+        const colabId = option.getAttribute('data-colab');
+        const date = option.getAttribute('data-date');
+        
+        const colabSelect = document.getElementById('colaborador_select');
+        const dateInput = document.getElementById('data_falta_input');
+        
+        if (colabSelect) colabSelect.value = colabId;
+        if (dateInput) dateInput.value = date;
+    }
+}
+</script>
+</div></div>
 
 <div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Faltas Registradas</h2></div><div class="card-body table-responsive">
 <table class="table"><thead><tr>

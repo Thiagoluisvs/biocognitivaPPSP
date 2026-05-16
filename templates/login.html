@@ -5,12 +5,7 @@
     <div class="auth-bg"></div>
     <div class="auth-card">
         <div class="auth-logo">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 8px;">
-                <rect width="48" height="48" rx="8" fill="#7BC000"/>
-                <text x="24" y="32" font-size="24" font-weight="bold" fill="white" text-anchor="middle" font-family="Arial, sans-serif">B</text>
-            </svg>
-            <h1>Biocognitiva <b>PPSP</b></h1>
-            <p>Plataforma de Prevenção de Substâncias Psicoativas</p>
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Biocognitiva Logo" style="width: 280px; height: auto; margin-bottom: 20px;">
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}

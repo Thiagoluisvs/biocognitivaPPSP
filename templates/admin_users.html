@@ -37,7 +37,10 @@
                         </th>
                         <th>Usuário</th>
                         <th>Contato</th>
+                        <th>Empresa</th>
                         <th>Perfil</th>
+                        <th>Último Login</th>
+                        <th>Criado em</th>
                         <th>Status</th>
                         <th class="actions-cell">Ações</th>
                     </tr>
@@ -66,9 +69,18 @@
                         </div>
                     </td>
                     <td>
+                        <span class="user-sub">{{ u.empresa or '-' }}</span>
+                    </td>
+                    <td>
                         <span class="badge badge-{{ u.role }}">
                             {{ u.role.replace('_',' ').title() }}
                         </span>
+                    </td>
+                    <td>
+                        <span class="user-sub">{{ u.last_login or 'Nunca' }}</span>
+                    </td>
+                    <td>
+                        <span class="user-sub">{{ u.created_at[:16] if u.created_at else '-' }}</span>
                     </td>
                     <td>
                         {% if u.active %}

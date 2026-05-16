@@ -13,6 +13,7 @@
 <form method="POST" action="{{ url_for('controle_positivo_novo') }}" enctype="multipart/form-data" id="frm">
     <div class="form-group"><label>Tipo *</label><select name="tipo_evento" class="form-select" id="tipo_evento">
         <option value="positivo_amostra">Amostra positiva / laboratorial</option>
+        <option value="analise_laboratorial">Análise laboratorial</option>
         <option value="agendamento_avaliacao_psicologica">Agendamento — Avaliação psicológica</option>
         <option value="agendamento_medico_revisor">Agendamento — Médico revisor</option>
     </select></div>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block page_title %}Arquivos do Resultado{% endblock %}
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('resultados') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Voltar</a>
+    <h2><i class="fas fa-eye"></i> Arquivos do Resultado</h2>
+</div>
+
+<div class="card"><div class="card-body">
+    <h3 style="margin-top:0;">{{ resultado.colab_name }}</h3>
+    <p class="text-muted">Data da Coleta: <strong>{% if resultado.data_coleta %}{{ resultado.data_coleta }}{% else %}—{% endif %}</strong></p>
+    {% if resultado.observacao %}<p class="text-muted">Observação: <strong>{{ resultado.observacao }}</strong></p>{% endif %}
+
+    <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border, #eee);">
+
+    <div class="grid-2">
+        {% if resultado.arquivo_urina %}
+        <div class="card"><div class="card-header"><h4>Toxicológico Urina</h4></div><div class="card-body text-center">
+            <div style="margin-bottom:1rem;"><span class="badge {% if resultado.res_urina=='negativo' %}badge-success{% elif resultado.res_urina=='positivo' %}badge-danger{% else %}badge-warning{% endif %}">{{ resultado.res_urina.replace('_', ' ').title() }}</span></div>
+            <a href="{{ url_for('serve_document', filename=resultado.arquivo_urina) }}" target="_blank" class="btn btn-primary"><i class="fas fa-vial"></i> Visualizar Arquivo</a>
+        </div></div>
+        {% endif %}
+
+        {% if resultado.arquivo_queratina %}
+        <div class="card"><div class="card-header"><h4>Toxicológico Queratina</h4></div><div class="card-body text-center">
+            <div style="margin-bottom:1rem;"><span class="badge {% if resultado.res_queratina=='negativo' %}badge-success{% elif resultado.res_queratina=='positivo' %}badge-danger{% else %}badge-warning{% endif %}">{{ resultado.res_queratina.replace('_', ' ').title() }}</span></div>
+            <a href="{{ url_for('serve_document', filename=resultado.arquivo_queratina) }}" target="_blank" class="btn btn-primary"><i class="fas fa-dna"></i> Visualizar Arquivo</a>
+        </div></div>
+        {% endif %}
+
+        {% if resultado.foto_bafometro %}
+        <div class="card"><div class="card-header"><h4>Resultado Alcoolemia</h4></div><div class="card-body text-center">
+            <div style="margin-bottom:1rem;"><span class="badge {% if resultado.res_alcoolemia=='negativo' %}badge-success{% elif resultado.res_alcoolemia=='positivo' %}badge-danger{% else %}badge-warning{% endif %}">{{ resultado.res_alcoolemia.replace('_', ' ').title() }}</span></div>
+            <a href="{{ url_for('serve_document', filename=resultado.foto_bafometro) }}" target="_blank" class="btn btn-primary"><i class="fas fa-image"></i> Visualizar Resultado</a>
+        </div></div>
+        {% endif %}
+
+        {% if resultado.foto_termo_consentimento %}
+        <div class="card"><div class="card-header"><h4>Termo de Consentimento</h4></div><div class="card-body text-center">
+            <a href="{{ url_for('serve_document', filename=resultado.foto_termo_consentimento) }}" target="_blank" class="btn btn-primary"><i class="fas fa-file-pdf"></i> Visualizar Termo</a>
+        </div></div>
+        {% endif %}
+
+        {% if resultado.foto_doador %}
+        <div class="card"><div class="card-header"><h4>Foto do Doador</h4></div><div class="card-body text-center">
+            <a href="{{ url_for('serve_document', filename=resultado.foto_doador) }}" target="_blank" class="btn btn-primary"><i class="fas fa-image"></i> Visualizar Foto</a>
+        </div></div>
+        {% endif %}
+
+        {% if resultado.foto_documento %}
+        <div class="card"><div class="card-header"><h4>Foto do Documento</h4></div><div class="card-body text-center">
+            <a href="{{ url_for('serve_document', filename=resultado.foto_documento) }}" target="_blank" class="btn btn-primary"><i class="fas fa-file-pdf"></i> Visualizar Documento</a>
+        </div></div>
+        {% endif %}
+    </div>
+
+    {% if not resultado.arquivo_resultado and not resultado.foto_doador and not resultado.foto_bafometro and not resultado.foto_termo_consentimento and not resultado.foto_documento and not resultado.arquivo_urina and not resultado.arquivo_queratina %}
+    <p class="text-center text-muted" style="padding: 2rem;">Nenhum arquivo anexado a este resultado.</p>
+    {% endif %}
+
+</div></div>
+{% endblock %}

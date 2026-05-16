@@ -9,6 +9,7 @@
 <form method="POST" enctype="multipart/form-data">
     <div class="form-group"><label>Tipo *</label><select name="tipo_evento" class="form-select" required>
         <option value="positivo_amostra" {% if evento.tipo_evento=='positivo_amostra' %}selected{% endif %}>Amostra positiva / laboratorial</option>
+        <option value="analise_laboratorial" {% if evento.tipo_evento=='analise_laboratorial' %}selected{% endif %}>Análise laboratorial</option>
         <option value="agendamento_avaliacao_psicologica" {% if evento.tipo_evento=='agendamento_avaliacao_psicologica' %}selected{% endif %}>Agendamento — Avaliação psicológica</option>
         <option value="agendamento_medico_revisor" {% if evento.tipo_evento=='agendamento_medico_revisor' %}selected{% endif %}>Agendamento — Médico revisor</option>
     </select></div>

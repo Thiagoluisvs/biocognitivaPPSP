@@ -8,6 +8,7 @@
     </div>
 </div>
 <div class="grid-2">
+{% if user.role in ('adm_biocognitiva','administrador', 'super_admin') %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-upload"></i> Enviar Arquivo Financeiro</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('financeiro_upload') }}" enctype="multipart/form-data">
     <div class="form-group"><label>Tipo de Documento *</label><select name="tipo" class="form-select" required>
@@ -15,22 +16,27 @@
         <option value="tabela_precos">Tabela de Preços</option><option value="outro">Outro</option>
     </select></div>
     <div class="form-group"><label>Título / Mês Referência *</label><input type="text" name="titulo" class="form-input" placeholder="Ex: Boleto Janeiro 2026" required></div>
+    <div class="form-group"><label>Empresa Devedora</label><input type="text" name="empresa_devedora" class="form-input" placeholder="Nome da empresa"></div>
     <div class="form-group"><label>Arquivo *</label><input type="file" name="file" class="form-input" required></div>
     <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Enviar Documento</button>
 </form></div></div>
+{% endif %}
 
-<div class="card"><div class="card-header"><h2><i class="fas fa-list"></i> Arquivos Financeiros</h2></div><div class="card-body table-responsive">
+<div class="card" {% if user.role not in ('adm_biocognitiva','administrador', 'super_admin') %}style="grid-column: 1 / -1;"{% endif %}><div class="card-header"><h2><i class="fas fa-list"></i> Arquivos Financeiros</h2></div><div class="card-body table-responsive">
 <table class="table"><thead><tr>
-    <th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>
-    <th>Data</th><th>Tipo</th><th>Título</th><th>Arquivo</th><th class="actions-cell">Ações</th>
+    {% if user.role in ('adm_biocognitiva','administrador', 'super_admin') %}<th class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" id="selectAll"><span class="checkmark"></span></label></th>{% endif %}
+    <th>Data</th><th>Tipo</th><th>Título</th><th>Empresa Devedora</th><th>Arquivo</th><th class="actions-cell">Ações</th>
 </tr></thead><tbody>
 {% for d in docs %}<tr>
-    <td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ d.id }}" data-entity="financeiro"><span class="checkmark"></span></label></td>
-    <td>{{ d.created_at[:10] }}</td><td><span class="badge badge-success">{{ d.tipo.replace('_',' ').title() }}</span></td><td>{{ d.titulo }}</td><td><span class="badge badge-info"><i class="fas fa-file"></i> {{ d.original_filename }}</span></td>
+    {% if user.role in ('adm_biocognitiva','administrador', 'super_admin') %}<td class="checkbox-cell"><label class="custom-checkbox"><input type="checkbox" class="row-select" value="{{ d.id }}" data-entity="financeiro"><span class="checkmark"></span></label></td>{% endif %}
+    <td>{{ d.created_at[:10] }}</td><td><span class="badge badge-success">{{ d.tipo.replace('_',' ').title() }}</span></td><td>{{ d.titulo }}</td><td>{{ d.empresa_devedora or '—' }}</td><td><span class="badge badge-info"><i class="fas fa-file"></i> {{ d.original_filename }}</span></td>
     <td class="actions-cell"><div class="actions-group">
+        <a href="{{ url_for('serve_document', filename=d.filename) }}" target="_blank" class="btn-icon view" title="Visualizar/Baixar"><i class="fas fa-download"></i></a>
+        {% if user.role in ('adm_biocognitiva','administrador', 'super_admin') %}
         <a href="{{ url_for('financeiro_editar', id=d.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>
         <a href="{{ url_for('financeiro_duplicar', id=d.id) }}" class="btn-icon duplicate" title="Duplicar"><i class="fas fa-copy"></i></a>
         <button type="button" onclick="confirmAction('Deseja excluir este documento?', '{{ url_for('financeiro_excluir', id=d.id) }}')" class="btn-icon delete" title="Excluir"><i class="fas fa-trash"></i></button>
+        {% endif %}
     </div></td>
 </tr>{% endfor %}
 </tbody></table></div></div>

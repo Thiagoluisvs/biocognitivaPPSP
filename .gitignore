@@ -15,3 +15,5 @@ AULA ONLINE.zip
 .idea/
 .vscode/
 *.log
+*.tar.gz
+scratch/

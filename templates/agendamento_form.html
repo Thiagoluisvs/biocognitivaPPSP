@@ -46,27 +46,34 @@
                         <option value="in_company" {{ 'selected' if agend.local_coleta == 'in_company' else '' }}>In company</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label><i class="fas fa-tasks"></i> Status</label>
-                    <select name="status" class="form-select">
-                        <option value="agendado" {{ 'selected' if agend.status == 'agendado' else '' }}>Agendado</option>
-                        <option value="realizado" {{ 'selected' if agend.status == 'realizado' else '' }}>Realizado</option>
-                        <option value="falta" {{ 'selected' if agend.status == 'falta' else '' }}>Falta</option>
-                        <option value="cancelado" {{ 'selected' if agend.status == 'cancelado' else '' }}>Cancelado</option>
-                    </select>
-                </div>
             </div>
             
             <div class="form-group">
-                <label><i class="fas fa-flask"></i> Exames * <small>(mínimo 2)</small></label>
+                <label><i class="fas fa-flask"></i> Exames e Status Individuais <small>(mínimo 2)</small></label>
                 {% set current_exames = agend.exames|exames_json_list %}
-                <div style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:.75rem;padding: 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border);">
+                <div class="exam-status-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-top:1rem;">
                     {% for val, lab in tipos_exame_agendamento %}
-                    <label class="custom-checkbox" style="display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" name="exames" value="{{ val }}" {{ 'checked' if val in current_exames else '' }}>
-                        <span class="checkmark"></span>
-                        <span style="font-size: 0.9rem; font-weight: 500;">{{ lab }}</span>
-                    </label>
+                    {% set st_field = 'st_' ~ val if val != 'alcoolemia' else 'st_alcoolemia' %}
+                    <div class="card" style="margin:0; border: 1px solid var(--border); background: var(--bg-secondary);">
+                        <div class="card-body" style="padding:1rem; display:flex; flex-direction:column; gap:12px;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <label class="custom-checkbox" style="flex-shrink:0;">
+                                    <input type="checkbox" name="exames" value="{{ val }}" {{ 'checked' if val in current_exames else '' }}>
+                                    <span class="checkmark"></span>
+                                </label>
+                                <strong style="font-size: 1rem; color: var(--text-primary);">{{ lab }}</strong>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:6px; display:block;">Status do Exame</label>
+                                <select name="st_{{ val }}" class="form-select form-select-sm" style="background:var(--bg-input);">
+                                    <option value="agendado" {{ 'selected' if agend['st_' ~ val] == 'agendado' else '' }}>Agendado</option>
+                                    <option value="realizado" {{ 'selected' if agend['st_' ~ val] == 'realizado' else '' }}>Realizado</option>
+                                    <option value="falta" {{ 'selected' if agend['st_' ~ val] == 'falta' else '' }}>Falta</option>
+                                    <option value="cancelado" {{ 'selected' if agend['st_' ~ val] == 'cancelado' else '' }}>Cancelado</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                     {% endfor %}
                 </div>
             </div>

@@ -10,6 +10,7 @@
     <div class="form-group"><label>Nome fantasia *</label><input type="text" name="nome_fantasia" class="form-input" value="{{ subcontratada.nome_fantasia }}" required></div>
     <div class="form-group"><label>Razão social</label><input type="text" name="razao_social" class="form-input" value="{{ subcontratada.razao_social or '' }}"></div>
     <div class="form-group"><label>CNPJ</label><input type="text" name="cnpj" class="form-input" value="{{ subcontratada.cnpj or '' }}"></div>
+    <div class="form-group"><label>Empresa Matriz (Contratante)</label><input type="text" name="empresa_matriz" class="form-input" value="{{ subcontratada.empresa_matriz or '' }}" placeholder="Nome da empresa matriz"></div>
     <div class="grid-2"><div class="form-group"><label>Contato</label><input type="text" name="contato_nome" class="form-input" value="{{ subcontratada.contato_nome or '' }}"></div>
     <div class="form-group"><label>Telefone</label><input type="text" name="telefone" class="form-input" value="{{ subcontratada.telefone or '' }}"></div></div>
     <div class="form-group"><label>E-mail</label><input type="email" name="email" class="form-input" value="{{ subcontratada.email or '' }}"></div>

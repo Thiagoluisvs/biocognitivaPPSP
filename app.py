@@ -3,8 +3,9 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
-import os, json, random, sqlite3
-from datetime import datetime
+import os, json, random, sqlite3, shutil
+from datetime import datetime, timedelta
+import threading, time
 from models import get_db, init_db, seed_demo_data
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -30,6 +31,7 @@ TIPOS_EXAME_VALIDOS = frozenset(t[0] for t in TIPOS_EXAME_AGENDAMENTO)
 _EXAME_ORDER = {t[0]: i for i, t in enumerate(TIPOS_EXAME_AGENDAMENTO)}
 TIPO_EVENTO_LABELS = {
     'positivo_amostra': 'Amostra positiva / laboratorial',
+    'analise_laboratorial': 'Análise laboratorial',
     'agendamento_avaliacao_psicologica': 'Agendamento — Avaliação psicológica',
     'agendamento_medico_revisor': 'Agendamento — Médico revisor',
 }
@@ -183,10 +185,16 @@ def index():
 @app.route('/login', methods=['GET','POST'])
 def login():
     if request.method=='POST':
-        db=get_db(); u=db.execute('SELECT * FROM users WHERE email=?',(request.form.get('email',''),)).fetchone(); db.close()
+        db=get_db()
+        u=db.execute('SELECT * FROM users WHERE email=?',(request.form.get('email',''),)).fetchone()
         if u and check_password_hash(u['password_hash'], request.form.get('password','')):
+            # Update last login
+            db.execute('UPDATE users SET last_login=? WHERE id=?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), u['id']))
+            db.commit()
+            db.close()
             session['user_id']=u['id']; session['role']=u['role']; session['name']=u['name']
             return redirect(url_for('dashboard'))
+        db.close()
         flash('Email ou senha incorretos.','error')
     return render_template('login.html')
 
@@ -256,7 +264,7 @@ def dashboard():
 
 @app.route('/export/<type>')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def export_csv(type):
     import io, csv
     from flask import Response
@@ -296,7 +304,7 @@ def colaboradores():
 
 @app.route('/colaborador/novo', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def colaborador_novo():
     u=get_user()
     if request.method=='POST':
@@ -334,7 +342,7 @@ def colaborador_novo():
 
 @app.route('/colaborador/<int:id>/editar', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def colaborador_editar(id):
     u=get_user(); db=get_db()
     colab=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
@@ -380,7 +388,7 @@ def colaborador_editar(id):
 
 @app.route('/colaborador/<int:id>/excluir')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def colaborador_excluir(id):
     u=get_user()
     db=get_db()
@@ -404,7 +412,7 @@ def colaborador_excluir(id):
 
 @app.route('/colaborador/<int:id>/duplicar')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def colaborador_duplicar(id):
     db=get_db()
     c=db.execute('SELECT * FROM colaboradores WHERE id=?',(id,)).fetchone()
@@ -473,9 +481,9 @@ def _bulk_duplicate_entity(db, entity, eid, uid):
         a = db.execute('SELECT * FROM agendamentos WHERE id=?', (eid,)).fetchone()
         if a:
             db.execute(
-                '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
-                VALUES (?,?,?,?,?,?,?)''',
-                (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], uid),
+                '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,st_urina,st_queratina,st_alcoolemia,agendado_por)
+                VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], a['st_urina'], a['st_queratina'], a['st_alcoolemia'], uid),
             )
         return
     if entity == 'treinamento':
@@ -491,20 +499,26 @@ def _bulk_duplicate_entity(db, entity, eid, uid):
         r = db.execute('SELECT * FROM resultados_exames WHERE id=?', (eid,)).fetchone()
         if r:
             db.execute(
-                '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,resultado,observacao,
-                foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,lancado_por)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,
+                res_alcoolemia, res_urina, res_queratina, observacao,
+                foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,
+                arquivo_urina, arquivo_queratina, lancado_por)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (
                     r['colaborador_id'],
                     r['agendamento_id'],
                     r['data_coleta'],
-                    r['resultado'],
+                    r['res_alcoolemia'],
+                    r['res_urina'],
+                    r['res_queratina'],
                     r['observacao'],
                     r['foto_doador'],
                     r['foto_bafometro'],
                     r['foto_termo_consentimento'],
                     r['foto_documento'],
                     r['arquivo_resultado'],
+                    r['arquivo_urina'],
+                    r['arquivo_queratina'],
                     uid,
                 ),
             )
@@ -635,7 +649,7 @@ def bulk_action(action):
                     db.execute('DELETE FROM treinamentos WHERE id=?', (i,))
                 elif entity == 'resultado':
                     r = db.execute(
-                        'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
+                        'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,arquivo_urina,arquivo_queratina FROM resultados_exames WHERE id=?',
                         (i,),
                     ).fetchone()
                     if r:
@@ -645,6 +659,8 @@ def bulk_action(action):
                             r['foto_termo_consentimento'],
                             r['foto_documento'],
                             r['arquivo_resultado'],
+                            r['arquivo_urina'],
+                            r['arquivo_queratina'],
                         ):
                             _unlink_upload_doc(fn or '')
                     db.execute('DELETE FROM resultados_exames WHERE id=?', (i,))
@@ -695,7 +711,7 @@ def bulk_action(action):
 # === AUDITORIA ===
 @app.route('/auditoria')
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def auditoria():
     u=get_user(); db=get_db()
     
@@ -738,7 +754,7 @@ def auditoria():
 
 @app.route('/auditoria/detalhe/<int:log_id>')
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def auditoria_detalhe(log_id):
     u=get_user(); db=get_db()
     log = db.execute('SELECT a.*, u.name as user_name FROM audit_log a JOIN users u ON a.user_id=u.id WHERE a.id=?', (log_id,)).fetchone()
@@ -769,7 +785,7 @@ def agendamentos():
 
 @app.route('/agendamento/novo', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def agendamento_novo():
     u=get_user()
     motivo=request.form.get('motivo','')
@@ -782,18 +798,24 @@ def agendamento_novo():
         flash('Selecione no mínimo dois exames por agendamento (PPSP).','error')
         return redirect(url_for('agendamentos'))
     db=get_db()
-    db.execute(
-        '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
-        VALUES (?,?,?,?,?,?,?)''',
-        (request.form['colaborador_id'],motivo,request.form['data_coleta'],
-         request.form['horario_coleta'],request.form['local_coleta'],json.dumps(exames),u['id']),
-    )
-    db.commit(); db.close(); flash('Agendamento criado!','success')
+    colab_ids = request.form.getlist('colaborador_id')
+    if not colab_ids:
+        flash('Selecione ao menos um colaborador.','error')
+        return redirect(url_for('agendamentos'))
+        
+    for cid in colab_ids:
+        db.execute(
+            '''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
+            VALUES (?,?,?,?,?,?,?)''',
+            (cid,motivo,request.form['data_coleta'],
+             request.form['horario_coleta'],request.form['local_coleta'],json.dumps(exames),u['id']),
+        )
+    db.commit(); db.close(); flash(f'{len(colab_ids)} agendamento(s) criado(s)!','success')
     return redirect(url_for('agendamentos'))
 
 @app.route('/agendamento/<int:id>/editar', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def agendamento_editar(id):
     u=get_user(); db=get_db()
     agend=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
@@ -802,10 +824,15 @@ def agendamento_editar(id):
     if request.method=='POST':
         raw=request.form.getlist('exames')
         exames=sorted({e for e in raw if e in TIPOS_EXAME_VALIDOS}, key=lambda x: _EXAME_ORDER.get(x, 99))
-        db.execute('''UPDATE agendamentos SET colaborador_id=?, motivo=?, data_coleta=?, horario_coleta=?, local_coleta=?, exames=?, status=?
+        db.execute('''UPDATE agendamentos SET colaborador_id=?, motivo=?, data_coleta=?, horario_coleta=?, local_coleta=?, exames=?, 
+            st_urina=?, st_queratina=?, st_alcoolemia=?
             WHERE id=?''',
             (request.form['colaborador_id'], request.form['motivo'], request.form['data_coleta'],
-             request.form['horario_coleta'], request.form['local_coleta'], json.dumps(exames), request.form.get('status','agendado'), id))
+             request.form['horario_coleta'], request.form['local_coleta'], json.dumps(exames), 
+             request.form.get('st_urina','agendado'),
+             request.form.get('st_queratina','agendado'),
+             request.form.get('st_alcoolemia','agendado'),
+             id))
         db.commit(); db.close(); flash('Agendamento atualizado!','success')
         return redirect(url_for('agendamentos'))
     
@@ -816,7 +843,7 @@ def agendamento_editar(id):
 
 @app.route('/agendamento/<int:id>/excluir')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def agendamento_excluir(id):
     db=get_db()
     try:
@@ -833,14 +860,16 @@ def agendamento_excluir(id):
 
 @app.route('/agendamento/<int:id>/duplicar')
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def agendamento_duplicar(id):
     db=get_db()
     a=db.execute('SELECT * FROM agendamentos WHERE id=?',(id,)).fetchone()
     if a:
-        db.execute('''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,agendado_por)
-            VALUES (?,?,?,?,?,?,?)''',
-            (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], get_user()['id']))
+        db.execute('''INSERT INTO agendamentos (colaborador_id,motivo,data_coleta,horario_coleta,local_coleta,exames,
+            st_urina, st_queratina, st_alcoolemia, agendado_por)
+            VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            (a['colaborador_id'], a['motivo'], a['data_coleta'], a['horario_coleta'], a['local_coleta'], a['exames'], 
+             a['st_urina'], a['st_queratina'], a['st_alcoolemia'], get_user()['id']))
         db.commit()
         flash('Agendamento duplicado!','success')
     db.close()
@@ -857,7 +886,7 @@ def treinamentos():
 
 @app.route('/treinamento/novo', methods=['POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def treinamento_novo():
     u=get_user()
     arq=''
@@ -889,20 +918,31 @@ def resultados():
     search=request.args.get('search','')
     q=('SELECT r.*,c.name as colab_name, a.data_coleta AS agendamento_data_coleta '
        'FROM resultados_exames r JOIN colaboradores c ON r.colaborador_id=c.id '
-       'LEFT JOIN agendamentos a ON r.agendamento_id=a.id')
-    if search: q+=f" WHERE c.name LIKE '%{search}%' OR c.cpf LIKE '%{search}%'"
+       'LEFT JOIN agendamentos a ON r.agendamento_id=a.id '
+       "WHERE NOT (r.res_alcoolemia='pendente' AND r.res_urina='pendente' AND r.res_queratina='pendente' "
+       "AND r.foto_bafometro='' AND r.arquivo_urina='' AND r.arquivo_queratina='')")
+    if search: q+=f" AND (c.name LIKE '%{search}%' OR c.cpf LIKE '%{search}%')"
     q+=' ORDER BY r.created_at DESC'
     res=db.execute(q).fetchall()
-    colabs=db.execute('SELECT id,name FROM colaboradores').fetchall(); db.close()
-    return render_template('resultados.html', user=u, resultados=res, colaboradores=colabs, search=search)
+    # Agendamentos que ainda não possuem resultado vinculado
+    agendamentos_pendentes = db.execute('''
+        SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
+        FROM agendamentos a
+        JOIN colaboradores c ON a.colaborador_id = c.id
+        LEFT JOIN resultados_exames r ON a.id = r.agendamento_id
+        WHERE r.id IS NULL
+        ORDER BY a.data_coleta DESC
+    ''').fetchall()
+    db.close()
+    return render_template('resultados.html', user=u, resultados=res, agendamentos_pendentes=agendamentos_pendentes, search=search)
 
 @app.route('/resultado/novo', methods=['POST'])
 @login_required
-@role_required('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador')
+@role_required('tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador', 'super_admin')
 def resultado_novo():
     u=get_user(); db=get_db()
-    foto_doador=foto_baf=foto_termo=foto_doc=arq_res=''
-    for field,sub in [('foto_doador','documents'),('foto_bafometro','documents'),('foto_termo','documents'),('foto_documento','documents'),('arquivo_resultado','documents')]:
+    foto_doador=foto_baf=foto_termo=foto_doc=arq_res=arq_urina=arq_queratina=''
+    for field,sub in [('foto_doador','documents'),('foto_bafometro','documents'),('foto_termo','documents'),('foto_documento','documents'),('arquivo_resultado','documents'),('arquivo_urina','documents'),('arquivo_queratina','documents')]:
         if field in request.files and request.files[field].filename:
             s,_,_=save_upload(request.files[field],sub)
             if field=='foto_doador': foto_doador=s
@@ -910,17 +950,40 @@ def resultado_novo():
             elif field=='foto_termo': foto_termo=s
             elif field=='foto_documento': foto_doc=s
             elif field=='arquivo_resultado': arq_res=s
-    data_coleta=(request.form.get('data_coleta') or '').strip()
-    if not data_coleta:
-        db.close(); flash('Data da coleta é obrigatória.','error')
+            elif field=='arquivo_urina': arq_urina=s
+            elif field=='arquivo_queratina': arq_queratina=s
+    agend_id = request.form.get('agendamento_id')
+    if not agend_id:
+        db.close(); flash('É necessário vincular um agendamento.','error')
         return redirect(url_for('resultados'))
+        
+    agend = db.execute('SELECT * FROM agendamentos WHERE id=?', (agend_id,)).fetchone()
+    if not agend:
+        db.close(); flash('Agendamento não encontrado.','error')
+        return redirect(url_for('resultados'))
+
+    data_coleta = (request.form.get('data_coleta') or agend['data_coleta'] or '').strip()
+    
     db.execute(
-        '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,resultado,observacao,foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,lancado_por)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-        (request.form['colaborador_id'],request.form.get('agendamento_id') or None,data_coleta,
-         request.form.get('resultado','pendente'),request.form.get('observacao',''),
-         foto_doador,foto_baf,foto_termo,foto_doc,arq_res,u['id']),
+        '''INSERT INTO resultados_exames (colaborador_id,agendamento_id,data_coleta,
+        res_alcoolemia, res_urina, res_queratina,
+        observacao,foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,arquivo_urina,arquivo_queratina,lancado_por)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (agend['colaborador_id'], agend_id, data_coleta,
+         request.form.get('res_alcoolemia','pendente'),
+         request.form.get('res_urina','pendente'),
+         request.form.get('res_queratina','pendente'),
+         request.form.get('observacao',''),
+         foto_doador,foto_baf,foto_termo,foto_doc,arq_res,arq_urina,arq_queratina,u['id']),
     )
+    
+    # Atualizar status do agendamento se houve lançamento
+    st_u = 'realizado' if request.form.get('res_urina') != 'pendente' or arq_urina else agend['st_urina']
+    st_q = 'realizado' if request.form.get('res_queratina') != 'pendente' or arq_queratina else agend['st_queratina']
+    st_a = 'realizado' if request.form.get('res_alcoolemia') != 'pendente' or foto_baf else agend['st_alcoolemia']
+    
+    db.execute('UPDATE agendamentos SET st_urina=?, st_queratina=?, st_alcoolemia=? WHERE id=?', (st_u, st_q, st_a, agend_id))
+    
     db.commit(); db.close(); flash('Resultado lançado!','success')
     return redirect(url_for('resultados'))
 
@@ -934,7 +997,7 @@ def relatorios():
 
 @app.route('/relatorio/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def relatorio_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -1023,7 +1086,7 @@ def video_aulas():
 # === SORTEIO ===
 @app.route('/sorteio', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def sorteio():
     u=get_user(); db=get_db()
     if request.method=='POST':
@@ -1049,7 +1112,7 @@ def institucional():
 
 @app.route('/institucional/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def institucional_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
@@ -1061,10 +1124,48 @@ def institucional_upload():
     db.commit(); db.close(); flash('Documento enviado!','success')
     return redirect(url_for('institucional'))
 
+@app.route('/institucional/<int:id>/edit', methods=['GET','POST'])
+@login_required
+@role_required('adm_biocognitiva','administrador', 'super_admin')
+def institucional_edit(id):
+    u = get_user(); db = get_db()
+    d = db.execute('SELECT * FROM institutional_docs WHERE id=?',(id,)).fetchone()
+    if not d: db.close(); flash('Documento não encontrado.','error'); return redirect(url_for('institucional'))
+    
+    if request.method=='POST':
+        category = request.form.get('category','institucional')
+        title = request.form.get('title', d['title'])
+        description = request.form.get('description','')
+        
+        file = request.files.get('file')
+        fn, orig, sz = d['filename'], d['original_filename'], d['file_size']
+        if file and file.filename:
+            _unlink_upload_doc(d['filename'])
+            fn, orig, sz = save_upload(file, 'documents')
+            
+        db.execute('UPDATE institutional_docs SET category=?, title=?, description=?, filename=?, original_filename=?, file_size=? WHERE id=?',
+                   (category, title, description, fn, orig, sz, id))
+        db.commit(); db.close(); flash('Documento atualizado!','success')
+        return redirect(url_for('institucional'))
+    db.close()
+    return render_template('institucional_form.html', user=u, doc=d)
+
+@app.route('/institucional/<int:id>/excluir')
+@login_required
+@role_required('adm_biocognitiva','administrador', 'super_admin')
+def institucional_excluir(id):
+    db = get_db()
+    row = db.execute('SELECT filename FROM institutional_docs WHERE id=?',(id,)).fetchone()
+    if row and row['filename']:
+        _unlink_upload_doc(row['filename'])
+    db.execute('DELETE FROM institutional_docs WHERE id=?',(id,))
+    db.commit(); db.close(); flash('Documento excluído.','success')
+    return redirect(url_for('institucional'))
+
 # === FINANCEIRO ===
 @app.route('/financeiro')
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('supervisor','tecnico','tecnico_biocognitiva','adm_biocognitiva','administrador', 'super_admin')
 def financeiro():
     u=get_user(); db=get_db()
     docs=db.execute('SELECT * FROM financeiro ORDER BY created_at DESC').fetchall(); db.close()
@@ -1072,45 +1173,64 @@ def financeiro():
 
 @app.route('/financeiro/upload', methods=['POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def financeiro_upload():
     u=get_user()
     if 'file' not in request.files or not request.files['file'].filename:
         flash('Selecione um arquivo.','error'); return redirect(url_for('financeiro'))
     s,orig,sz=save_upload(request.files['file'],'documents')
     db=get_db()
-    db.execute('INSERT INTO financeiro (tipo,titulo,descricao,filename,original_filename,file_size,uploaded_by) VALUES (?,?,?,?,?,?,?)',
-        (request.form.get('tipo','boleto'),request.form.get('titulo',orig),request.form.get('descricao',''),s,orig,sz,u['id']))
+    db.execute('INSERT INTO financeiro (tipo,titulo,descricao,empresa_devedora,filename,original_filename,file_size,uploaded_by) VALUES (?,?,?,?,?,?,?,?)',
+        (request.form.get('tipo','boleto'),request.form.get('titulo',orig),request.form.get('descricao',''),request.form.get('empresa_devedora',''),s,orig,sz,u['id']))
     db.commit(); db.close(); flash('Documento financeiro enviado!','success')
     return redirect(url_for('financeiro'))
 
 # === FALTAS (Técnico) ===
 @app.route('/faltas')
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador')
+@role_required('tecnico', 'adm_biocognitiva', 'administrador', 'super_admin')
 def faltas():
-    u=get_user(); db=get_db()
-    fs=db.execute('SELECT f.*,c.name as colab_name FROM faltas f JOIN colaboradores c ON f.colaborador_id=c.id ORDER BY f.data_falta DESC').fetchall()
-    colabs=db.execute('SELECT id,name FROM colaboradores').fetchall(); db.close()
-    return render_template('faltas.html', user=u, faltas=fs, colaboradores=colabs)
+    u = get_user(); db = get_db()
+    fs = db.execute('SELECT f.*, c.name as colab_name FROM faltas f JOIN colaboradores c ON f.colaborador_id = c.id ORDER BY f.data_falta DESC').fetchall()
+    colabs = db.execute('SELECT id, name FROM colaboradores WHERE status="ativo"').fetchall()
+    # Agendamentos pendentes para vincular
+    agendamentos = db.execute('''
+        SELECT a.id, a.data_coleta, a.horario_coleta, c.name as colab_name, a.colaborador_id
+        FROM agendamentos a 
+        JOIN colaboradores c ON a.colaborador_id = c.id 
+        WHERE (a.st_urina = 'agendado' OR a.st_queratina = 'agendado' OR a.st_alcoolemia = 'agendado')
+        ORDER BY a.data_coleta DESC
+    ''').fetchall()
+    db.close()
+    return render_template('faltas.html', user=u, faltas=fs, colaboradores=colabs, agendamentos=agendamentos)
 
 @app.route('/falta/nova', methods=['POST'])
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador')
+@role_required('tecnico', 'adm_biocognitiva', 'administrador', 'super_admin')
 def falta_nova():
-    u=get_user(); db=get_db()
-    db.execute('INSERT INTO faltas (colaborador_id,data_falta,observacao,registrado_por) VALUES (?,?,?,?)',
-        (request.form['colaborador_id'],request.form['data_falta'],request.form.get('observacao',''),u['id']))
-    # Update agendamento status if exists
-    db.execute("UPDATE agendamentos SET status='falta' WHERE colaborador_id=? AND data_coleta=?",
-        (request.form['colaborador_id'],request.form['data_falta']))
-    db.commit(); db.close(); flash('Falta registrada!','success')
+    u = get_user(); db = get_db()
+    colab_id = request.form['colaborador_id']
+    data_falta = request.form['data_falta']
+    agend_id = request.form.get('agendamento_id')
+    
+    db.execute('INSERT INTO faltas (colaborador_id, data_falta, agendamento_id, observacao, registrado_por) VALUES (?,?,?,?,?)',
+               (colab_id, data_falta, agend_id, request.form.get('observacao', ''), u['id']))
+    
+    # Update agendamento status
+    if agend_id:
+        db.execute("UPDATE agendamentos SET st_urina='falta', st_queratina='falta', st_alcoolemia='falta' WHERE id=?", (agend_id,))
+    else:
+        # Fallback to date/colab match if no explicit ID
+        db.execute("UPDATE agendamentos SET st_urina='falta', st_queratina='falta', st_alcoolemia='falta' WHERE colaborador_id=? AND data_coleta=? AND (st_urina='agendado' OR st_queratina='agendado' OR st_alcoolemia='agendado')",
+                   (colab_id, data_falta))
+                   
+    db.commit(); db.close(); flash('Falta registrada!', 'success')
     return redirect(url_for('faltas'))
 
 # === CONTROLE POSITIVO (Técnico) ===
 @app.route('/controle-positivo')
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador')
+@role_required('tecnico','adm_biocognitiva','administrador', 'super_admin')
 def controle_positivo():
     u=get_user(); db=get_db()
     cps=db.execute('SELECT cp.*,c.name as colab_name FROM controle_positivo cp JOIN colaboradores c ON cp.colaborador_id=c.id ORDER BY cp.created_at DESC').fetchall()
@@ -1119,7 +1239,7 @@ def controle_positivo():
 
 @app.route('/controle-positivo/novo', methods=['POST'])
 @login_required
-@role_required('tecnico','adm_biocognitiva','administrador')
+@role_required('tecnico','adm_biocognitiva','administrador', 'super_admin')
 def controle_positivo_novo():
     u=get_user()
     tipo=request.form.get('tipo_evento','positivo_amostra')
@@ -1145,7 +1265,7 @@ def controle_positivo_novo():
 
 @app.route('/treinamento/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def treinamento_editar(id):
     u = get_user()
     db = get_db()
@@ -1193,7 +1313,7 @@ def treinamento_editar(id):
 
 @app.route('/treinamento/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def treinamento_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'treinamento', id, get_user()['id'])
@@ -1205,7 +1325,7 @@ def treinamento_duplicar(id):
 
 @app.route('/treinamento/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def treinamento_excluir(id):
     db = get_db()
     try:
@@ -1223,9 +1343,27 @@ def treinamento_excluir(id):
     return redirect(url_for('treinamentos'))
 
 
+@app.route('/resultado/<int:id>/ver', methods=['GET'])
+@login_required
+def resultado_ver(id):
+    u = get_user()
+    db = get_db()
+    r = db.execute('''
+        SELECT r.*, c.name as colab_name
+        FROM resultados_exames r
+        LEFT JOIN colaboradores c ON r.colaborador_id = c.id
+        WHERE r.id=?
+    ''', (id,)).fetchone()
+    db.close()
+    if not r:
+        flash('Resultado não encontrado.', 'error')
+        return redirect(url_for('resultados'))
+    return render_template('resultado_ver.html', user=u, resultado=r)
+
+
 @app.route('/resultado/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def resultado_editar(id):
     u = get_user()
     db = get_db()
@@ -1240,6 +1378,8 @@ def resultado_editar(id):
         foto_termo = r['foto_termo_consentimento']
         foto_doc = r['foto_documento']
         arq_res = r['arquivo_resultado']
+        arq_urina = r['arquivo_urina']
+        arq_queratina = r['arquivo_queratina']
         if request.files.get('foto_doador') and request.files['foto_doador'].filename:
             _unlink_upload_doc(foto_doador or '')
             foto_doador, _, _ = save_upload(request.files['foto_doador'], 'documents')
@@ -1255,27 +1395,47 @@ def resultado_editar(id):
         if request.files.get('arquivo_resultado') and request.files['arquivo_resultado'].filename:
             _unlink_upload_doc(arq_res or '')
             arq_res, _, _ = save_upload(request.files['arquivo_resultado'], 'documents')
+        if request.files.get('arquivo_urina') and request.files['arquivo_urina'].filename:
+            _unlink_upload_doc(arq_urina or '')
+            arq_urina, _, _ = save_upload(request.files['arquivo_urina'], 'documents')
+        if request.files.get('arquivo_queratina') and request.files['arquivo_queratina'].filename:
+            _unlink_upload_doc(arq_queratina or '')
+            arq_queratina, _, _ = save_upload(request.files['arquivo_queratina'], 'documents')
         data_coleta = (request.form.get('data_coleta') or '').strip()
         if not data_coleta:
             db.close()
             flash('Data da coleta é obrigatória.', 'error')
             return redirect(url_for('resultado_editar', id=id))
         db.execute(
-            '''UPDATE resultados_exames SET colaborador_id=?, data_coleta=?, resultado=?, observacao=?,
-            foto_doador=?, foto_bafometro=?, foto_termo_consentimento=?, foto_documento=?, arquivo_resultado=? WHERE id=?''',
+            '''UPDATE resultados_exames SET colaborador_id=?, data_coleta=?, 
+            res_alcoolemia=?, res_urina=?, res_queratina=?, observacao=?,
+            foto_doador=?, foto_bafometro=?, foto_termo_consentimento=?, foto_documento=?, arquivo_resultado=?,
+            arquivo_urina=?, arquivo_queratina=? WHERE id=?''',
             (
                 request.form['colaborador_id'],
                 data_coleta,
-                request.form.get('resultado', 'pendente'),
+                request.form.get('res_alcoolemia', 'pendente'),
+                request.form.get('res_urina', 'pendente'),
+                request.form.get('res_queratina', 'pendente'),
                 request.form.get('observacao', ''),
                 foto_doador,
                 foto_baf,
                 foto_termo,
                 foto_doc,
                 arq_res,
+                arq_urina,
+                arq_queratina,
                 id,
             ),
         )
+        
+        # Sincronizar status de volta para o agendamento se estiver vinculado
+        if r['agendamento_id']:
+            st_u = 'realizado' if request.form.get('res_urina') != 'pendente' or arq_urina else 'agendado'
+            st_q = 'realizado' if request.form.get('res_queratina') != 'pendente' or arq_queratina else 'agendado'
+            st_a = 'realizado' if request.form.get('res_alcoolemia') != 'pendente' or foto_baf else 'agendado'
+            db.execute('UPDATE agendamentos SET st_urina=?, st_queratina=?, st_alcoolemia=? WHERE id=?', (st_u, st_q, st_a, r['agendamento_id']))
+
         db.commit()
         db.close()
         flash('Resultado atualizado!', 'success')
@@ -1287,7 +1447,7 @@ def resultado_editar(id):
 
 @app.route('/resultado/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def resultado_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'resultado', id, get_user()['id'])
@@ -1299,12 +1459,12 @@ def resultado_duplicar(id):
 
 @app.route('/resultado/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def resultado_excluir(id):
     db = get_db()
     try:
         r = db.execute(
-            'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado FROM resultados_exames WHERE id=?',
+            'SELECT foto_doador,foto_bafometro,foto_termo_consentimento,foto_documento,arquivo_resultado,arquivo_urina,arquivo_queratina FROM resultados_exames WHERE id=?',
             (id,),
         ).fetchone()
         if r:
@@ -1314,13 +1474,20 @@ def resultado_excluir(id):
                 r['foto_termo_consentimento'],
                 r['foto_documento'],
                 r['arquivo_resultado'],
+                r['arquivo_urina'],
+                r['arquivo_queratina'],
             ):
                 _unlink_upload_doc(fn or '')
             
+            # Resetar status do agendamento se estiver vinculado
+            res_data = db.execute('SELECT agendamento_id FROM resultados_exames WHERE id=?', (id,)).fetchone()
+            if res_data and res_data['agendamento_id']:
+                db.execute("UPDATE agendamentos SET st_urina='agendado', st_queratina='agendado', st_alcoolemia='agendado' WHERE id=?", (res_data['agendamento_id'],))
+
             # Cleanup references
             db.execute('UPDATE controle_positivo SET resultado_id=NULL WHERE resultado_id=?', (id,))
             db.execute('UPDATE rastreabilidade SET resultado_id=NULL WHERE resultado_id=?', (id,))
-            
+
             db.execute('DELETE FROM resultados_exames WHERE id=?', (id,))
             db.commit()
             flash('Resultado excluído.', 'success')
@@ -1336,7 +1503,7 @@ def resultado_excluir(id):
 
 @app.route('/relatorio/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def relatorio_editar(id):
     u = get_user()
     db = get_db()
@@ -1365,7 +1532,7 @@ def relatorio_editar(id):
 
 @app.route('/relatorio/<int:id>/duplicar')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def relatorio_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'relatorio', id, get_user()['id'])
@@ -1377,7 +1544,7 @@ def relatorio_duplicar(id):
 
 @app.route('/relatorio/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def relatorio_excluir(id):
     db = get_db()
     row = db.execute('SELECT filename FROM relatorios WHERE id=?', (id,)).fetchone()
@@ -1392,7 +1559,7 @@ def relatorio_excluir(id):
 
 @app.route('/servico/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def servico_editar(id):
     u = get_user()
     db = get_db()
@@ -1427,7 +1594,7 @@ def servico_editar(id):
 
 @app.route('/servico/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def servico_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'servico', id, get_user()['id'])
@@ -1439,7 +1606,7 @@ def servico_duplicar(id):
 
 @app.route('/servico/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def servico_excluir(id):
     db = get_db()
     s = db.execute('SELECT documento_anexo,documento_resposta FROM servicos WHERE id=?', (id,)).fetchone()
@@ -1455,7 +1622,7 @@ def servico_excluir(id):
 
 @app.route('/sorteio/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def sorteio_editar(id):
     u = get_user()
     db = get_db()
@@ -1479,7 +1646,7 @@ def sorteio_editar(id):
 
 @app.route('/sorteio/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def sorteio_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'sorteio', id, get_user()['id'])
@@ -1491,7 +1658,7 @@ def sorteio_duplicar(id):
 
 @app.route('/sorteio/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def sorteio_excluir(id):
     db = get_db()
     db.execute('DELETE FROM sorteios WHERE id=?', (id,))
@@ -1503,7 +1670,7 @@ def sorteio_excluir(id):
 
 @app.route('/falta/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def falta_editar(id):
     u = get_user()
     db = get_db()
@@ -1518,7 +1685,7 @@ def falta_editar(id):
             (request.form['colaborador_id'], request.form['data_falta'], request.form.get('observacao', ''), id),
         )
         db.execute(
-            "UPDATE agendamentos SET status='falta' WHERE colaborador_id=? AND data_coleta=?",
+            "UPDATE agendamentos SET st_urina='falta', st_queratina='falta', st_alcoolemia='falta' WHERE colaborador_id=? AND data_coleta=?",
             (request.form['colaborador_id'], request.form['data_falta']),
         )
         db.commit()
@@ -1532,7 +1699,7 @@ def falta_editar(id):
 
 @app.route('/falta/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def falta_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'falta', id, get_user()['id'])
@@ -1544,7 +1711,7 @@ def falta_duplicar(id):
 
 @app.route('/falta/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def falta_excluir(id):
     db = get_db()
     db.execute('DELETE FROM faltas WHERE id=?', (id,))
@@ -1556,7 +1723,7 @@ def falta_excluir(id):
 
 @app.route('/controle-positivo/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def controle_positivo_editar(id):
     u = get_user()
     db = get_db()
@@ -1601,7 +1768,7 @@ def controle_positivo_editar(id):
 
 @app.route('/controle-positivo/<int:id>/duplicar')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def controle_positivo_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'controle_positivo', id, get_user()['id'])
@@ -1613,7 +1780,7 @@ def controle_positivo_duplicar(id):
 
 @app.route('/controle-positivo/<int:id>/excluir')
 @login_required
-@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'adm_biocognitiva', 'administrador', 'super_admin')
 def controle_positivo_excluir(id):
     db = get_db()
     cp = db.execute('SELECT arquivo_resultado FROM controle_positivo WHERE id=?', (id,)).fetchone()
@@ -1628,7 +1795,7 @@ def controle_positivo_excluir(id):
 
 @app.route('/cliente/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def cliente_editar(id):
     u = get_user()
     db = get_db()
@@ -1668,7 +1835,7 @@ def cliente_editar(id):
 
 @app.route('/cliente/<int:id>/duplicar')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def cliente_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'cliente', id, get_user()['id'])
@@ -1680,7 +1847,7 @@ def cliente_duplicar(id):
 
 @app.route('/cliente/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def cliente_excluir(id):
     db = get_db()
     db.execute('DELETE FROM clientes_empresa WHERE id=?', (id,))
@@ -1692,7 +1859,7 @@ def cliente_excluir(id):
 
 @app.route('/subcontratada/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def subcontratada_editar(id):
     u = get_user()
     db = get_db()
@@ -1708,7 +1875,7 @@ def subcontratada_editar(id):
             flash('Nome fantasia é obrigatório.', 'error')
             return redirect(url_for('subcontratada_editar', id=id))
         db.execute(
-            '''UPDATE subcontratadas SET nome_fantasia=?, razao_social=?, cnpj=?, contato_nome=?, telefone=?, email=?, observacao=?
+            '''UPDATE subcontratadas SET nome_fantasia=?, razao_social=?, cnpj=?, contato_nome=?, telefone=?, email=?, observacao=?, empresa_matriz=?
             WHERE id=?''',
             (
                 nf,
@@ -1718,6 +1885,7 @@ def subcontratada_editar(id):
                 request.form.get('telefone', '').strip(),
                 request.form.get('email', '').strip(),
                 request.form.get('observacao', '').strip(),
+                request.form.get('empresa_matriz', '').strip(),
                 id,
             ),
         )
@@ -1731,7 +1899,7 @@ def subcontratada_editar(id):
 
 @app.route('/subcontratada/<int:id>/duplicar')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def subcontratada_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'subcontratada', id, get_user()['id'])
@@ -1743,7 +1911,7 @@ def subcontratada_duplicar(id):
 
 @app.route('/subcontratada/<int:id>/excluir')
 @login_required
-@role_required('supervisor', 'adm_biocognitiva', 'administrador')
+@role_required('supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def subcontratada_excluir(id):
     db = get_db()
     db.execute('DELETE FROM subcontratadas WHERE id=?', (id,))
@@ -1755,7 +1923,7 @@ def subcontratada_excluir(id):
 
 @app.route('/financeiro/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def financeiro_editar(id):
     u = get_user()
     db = get_db()
@@ -1770,11 +1938,12 @@ def financeiro_editar(id):
             _unlink_upload_doc(fn)
             fn, orig, sz = save_upload(request.files['file'], 'documents')
         db.execute(
-            'UPDATE financeiro SET tipo=?, titulo=?, descricao=?, filename=?, original_filename=?, file_size=? WHERE id=?',
+            'UPDATE financeiro SET tipo=?, titulo=?, descricao=?, empresa_devedora=?, filename=?, original_filename=?, file_size=? WHERE id=?',
             (
                 request.form.get('tipo', d['tipo']),
                 request.form.get('titulo', d['titulo']),
                 request.form.get('descricao', ''),
+                request.form.get('empresa_devedora', ''),
                 fn,
                 orig,
                 sz,
@@ -1791,7 +1960,7 @@ def financeiro_editar(id):
 
 @app.route('/financeiro/<int:id>/duplicar')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('tecnico', 'tecnico_biocognitiva', 'supervisor', 'adm_biocognitiva', 'administrador', 'super_admin')
 def financeiro_duplicar(id):
     db = get_db()
     _bulk_duplicate_entity(db, 'financeiro', id, get_user()['id'])
@@ -1803,7 +1972,7 @@ def financeiro_duplicar(id):
 
 @app.route('/financeiro/<int:id>/excluir')
 @login_required
-@role_required('adm_biocognitiva', 'administrador')
+@role_required('adm_biocognitiva', 'administrador', 'super_admin')
 def financeiro_excluir(id):
     db = get_db()
     row = db.execute('SELECT filename FROM financeiro WHERE id=?', (id,)).fetchone()
@@ -1818,7 +1987,7 @@ def financeiro_excluir(id):
 
 @app.route('/clientes', methods=['GET','POST'])
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def clientes():
     u=get_user(); db=get_db()
     if request.method=='POST':
@@ -1841,7 +2010,7 @@ def clientes():
 
 @app.route('/subcontratadas', methods=['GET','POST'])
 @login_required
-@role_required('supervisor','adm_biocognitiva','administrador')
+@role_required('supervisor','adm_biocognitiva','administrador', 'super_admin')
 def subcontratadas():
     u=get_user(); db=get_db()
     if request.method=='POST':
@@ -1850,11 +2019,12 @@ def subcontratadas():
             flash('Nome fantasia é obrigatório.','error')
         else:
             db.execute(
-                '''INSERT INTO subcontratadas (nome_fantasia,razao_social,cnpj,contato_nome,telefone,email,observacao,registered_by)
-                VALUES (?,?,?,?,?,?,?,?)''',
+                '''INSERT INTO subcontratadas (nome_fantasia,razao_social,cnpj,contato_nome,telefone,email,observacao,empresa_matriz,registered_by)
+                VALUES (?,?,?,?,?,?,?,?,?)''',
                 (nf,request.form.get('razao_social','').strip(),request.form.get('cnpj','').strip(),
                  request.form.get('contato_nome','').strip(),request.form.get('telefone','').strip(),
-                 request.form.get('email','').strip(),request.form.get('observacao','').strip(),u['id']),
+                 request.form.get('email','').strip(),request.form.get('observacao','').strip(),
+                 request.form.get('empresa_matriz','').strip(),u['id']),
             )
             db.commit(); flash('Subcontratada cadastrada!','success')
     rows=db.execute('SELECT * FROM subcontratadas ORDER BY nome_fantasia').fetchall(); db.close()
@@ -1863,7 +2033,7 @@ def subcontratadas():
 
 @app.route('/estoque-kits')
 @login_required
-@role_required('adm_biocognitiva','administrador')
+@role_required('adm_biocognitiva','administrador', 'super_admin')
 def estoque_kits():
     u=get_user()
     return render_template('estoque_kits.html', user=u)
@@ -1872,7 +2042,7 @@ def estoque_kits():
 # === ADMIN USERS ===
 @app.route('/admin/users')
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def admin_users():
     u=get_user(); db=get_db()
     users=db.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall(); db.close()
@@ -1880,7 +2050,7 @@ def admin_users():
 
 @app.route('/admin/user/<int:uid>/toggle', methods=['POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def toggle_user(uid):
     u = get_user()
     db=get_db()
@@ -1899,7 +2069,7 @@ def toggle_user(uid):
 
 @app.route('/admin/user/new', methods=['GET', 'POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def create_user():
     u = get_user()
     if request.method == 'POST':
@@ -1943,7 +2113,7 @@ def create_user():
 
 @app.route('/admin/user/<int:uid>/edit', methods=['GET', 'POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def edit_user(uid):
     u = get_user()
     db = get_db()
@@ -2005,7 +2175,7 @@ def edit_user(uid):
 
 @app.route('/admin/user/<int:uid>/delete', methods=['POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def delete_user(uid):
     u = get_user()
     if uid == u['id']:
@@ -2025,7 +2195,7 @@ def delete_user(uid):
 
 @app.route('/admin/users/delete_batch', methods=['POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def delete_users_batch():
     u = get_user()
     user_ids = request.form.getlist('user_ids')
@@ -2054,7 +2224,7 @@ def delete_users_batch():
 # === SETTINGS ===
 @app.route('/settings', methods=['GET','POST'])
 @login_required
-@role_required('administrador')
+@role_required('administrador', 'super_admin')
 def settings():
     u=get_user(); db=get_db()
     if request.method=='POST':
@@ -2064,6 +2234,179 @@ def settings():
         db.commit(); flash('Configurações salvas!','success')
     s={r['key']:r['value'] for r in db.execute('SELECT * FROM settings').fetchall()}; db.close()
     return render_template('settings.html', user=u, settings=s)
+
+# === SUPER ADMIN (LOCAL ONLY) ===
+BACKUP_DIR = os.path.join(os.path.dirname(__file__), 'backups')
+if not os.path.exists(BACKUP_DIR): os.makedirs(BACKUP_DIR)
+
+@app.route('/superadmin')
+@login_required
+@role_required('super_admin')
+def superadmin():
+    u = get_user(); db = get_db()
+    
+    # List backups
+    backups = []
+    for f in sorted(os.listdir(BACKUP_DIR), reverse=True):
+        if f.endswith('.db'):
+            path = os.path.join(BACKUP_DIR, f)
+            stat = os.stat(path)
+            backups.append({
+                'name': f,
+                'size': stat.st_size,
+                'date': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            })
+            
+    stats = {
+        'users': db.execute('SELECT COUNT(*) FROM users').fetchone()[0],
+        'colabs': db.execute('SELECT COUNT(*) FROM colaboradores').fetchone()[0]
+    }
+    db_path = os.path.abspath('biocognitiva.db')
+    settings = {r['key']: r['value'] for r in db.execute('SELECT * FROM settings').fetchall()}
+    users_list = db.execute('SELECT * FROM users ORDER BY created_at DESC LIMIT 10').fetchall()
+    db.close()
+    return render_template('superadmin.html', user=u, backups=backups, stats=stats, db_path=db_path, settings=settings, users_list=users_list)
+
+@app.route('/superadmin/backup/create', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def superadmin_backup_create():
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_file = f'biocognitiva_backup_{timestamp}.db'
+    shutil.copy2('biocognitiva.db', os.path.join(BACKUP_DIR, backup_file))
+    
+    flash(f'Backup {backup_file} criado com sucesso!', 'success')
+    return redirect(url_for('superadmin'))
+
+@app.route('/superadmin/backup/download/<filename>')
+@login_required
+@role_required('super_admin')
+def superadmin_backup_download(filename):
+    return send_from_directory(BACKUP_DIR, filename, as_attachment=True)
+
+@app.route('/superadmin/backup/delete/<filename>')
+@login_required
+@role_required('super_admin')
+def superadmin_backup_delete(filename):
+    path = os.path.join(BACKUP_DIR, filename)
+    if os.path.exists(path):
+        os.remove(path)
+        flash('Backup removido.', 'success')
+    return redirect(url_for('superadmin'))
+
+@app.route('/superadmin/backup/restore/<filename>', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def superadmin_backup_restore(filename):
+    path = os.path.join(BACKUP_DIR, filename)
+    if os.path.exists(path):
+        try:
+            # Safety backup of current state before restore
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            shutil.copy2('biocognitiva.db', os.path.join(BACKUP_DIR, f'pre_restore_safety_{ts}.db'))
+            
+            # Perform restore
+            shutil.copy2(path, 'biocognitiva.db')
+            flash('Banco de dados restaurado com sucesso! Um backup de segurança do estado anterior foi criado.', 'success')
+        except Exception as e:
+            flash(f'Erro ao restaurar backup: {e}', 'error')
+    return redirect(url_for('superadmin'))
+
+@app.route('/superadmin/user/create', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def superadmin_user_create():
+    name = request.form.get('name')
+    email = request.form.get('email')
+    password = request.form.get('password')
+    role = request.form.get('role', 'colaborador')
+    empresa = request.form.get('empresa', '')
+    
+    if not name or not email or not password:
+        flash('Preencha todos os campos.', 'error')
+        return redirect(url_for('superadmin'))
+        
+    db = get_db()
+    try:
+        db.execute('INSERT INTO users (name, email, password_hash, role, empresa, active) VALUES (?,?,?,?,?,1)',
+                   (name, email, generate_password_hash(password, method='pbkdf2:sha256'), role, empresa))
+        db.commit()
+        flash(f'Usuário {name} criado como {role}!', 'success')
+    except sqlite3.IntegrityError:
+        flash('Email já cadastrado.', 'error')
+    finally:
+        db.close()
+        
+    return redirect(url_for('superadmin'))
+
+@app.route('/superadmin/backup/settings', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def superadmin_backup_settings():
+    enabled = request.form.get('backup_auto_enabled', '0')
+    freq = request.form.get('backup_frequency', 'daily')
+    days = request.form.get('backup_retention_days', '30')
+    
+    db = get_db()
+    db.execute('UPDATE settings SET value=? WHERE key=?', (enabled, 'backup_auto_enabled'))
+    db.execute('UPDATE settings SET value=? WHERE key=?', (freq, 'backup_frequency'))
+    db.execute('UPDATE settings SET value=? WHERE key=?', (days, 'backup_retention_days'))
+    db.commit()
+    db.close()
+    
+    flash('Configurações de backup salvas!', 'success')
+    return redirect(url_for('superadmin'))
+
+def run_auto_backup():
+    """Background task to run auto backups and cleanup old ones"""
+    while True:
+        try:
+            with app.app_context():
+                db = get_db()
+                enabled_row = db.execute("SELECT value FROM settings WHERE key='backup_auto_enabled'").fetchone()
+                if enabled_row and enabled_row[0] == '1':
+                    freq = db.execute("SELECT value FROM settings WHERE key='backup_frequency'").fetchone()[0]
+                    retention = int(db.execute("SELECT value FROM settings WHERE key='backup_retention_days'").fetchone()[0])
+                    last_run_row = db.execute("SELECT value FROM settings WHERE key='backup_last_run'").fetchone()
+                    last_run_val = last_run_row[0] if last_run_row else None
+                    
+                    now = datetime.now()
+                    should_run = False
+                    
+                    if not last_run_val:
+                        should_run = True
+                    else:
+                        last_run = datetime.strptime(last_run_val, '%Y-%m-%d %H:%M:%S')
+                        if freq == '6h' and now >= last_run + timedelta(hours=6): should_run = True
+                        elif freq == '12h' and now >= last_run + timedelta(hours=12): should_run = True
+                        elif freq == 'daily' and now.hour >= 2 and now.date() > last_run.date(): should_run = True
+                        elif freq == 'weekly' and now.weekday() == 6 and now.hour >= 2 and now.date() > last_run.date(): should_run = True
+                        elif freq == 'monthly' and now.day == 1 and now.hour >= 2 and now.date() > last_run.date(): should_run = True
+                    
+                    if should_run:
+                        # Create backup
+                        timestamp = now.strftime('%Y%m%d_%H%M%S')
+                        backup_file = f'biocognitiva_auto_backup_{timestamp}.db'
+                        shutil.copy2('biocognitiva.db', os.path.join(BACKUP_DIR, backup_file))
+                        db.execute("UPDATE settings SET value=? WHERE key='backup_last_run'", (now.strftime('%Y-%m-%d %H:%M:%S'),))
+                        db.commit()
+                        
+                        # Cleanup old backups
+                        for f in os.listdir(BACKUP_DIR):
+                            if f.endswith('.db'):
+                                path = os.path.join(BACKUP_DIR, f)
+                                mtime = datetime.fromtimestamp(os.path.getmtime(path))
+                                if now > mtime + timedelta(days=retention):
+                                    os.remove(path)
+                db.close()
+        except Exception as e:
+            print(f"Error in auto backup: {e}")
+            
+        time.sleep(60) # Check every minute
+
+# Start background thread
+backup_thread = threading.Thread(target=run_auto_backup, daemon=True)
+backup_thread.start()
 
 with app.app_context():
     init_db()

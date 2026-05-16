@@ -50,6 +50,7 @@
                         <option value="tecnico" {% if target_user and target_user.role == 'tecnico' %}selected{% endif %}>Técnico Biocognitiva</option>
                         <option value="adm_biocognitiva" {% if target_user and target_user.role == 'adm_biocognitiva' %}selected{% endif %}>ADM Biocognitiva</option>
                         <option value="administrador" {% if target_user and target_user.role == 'administrador' %}selected{% endif %}>Administrador Geral</option>
+                        <option value="super_admin" {% if target_user and target_user.role == 'super_admin' %}selected{% endif %}>Super Admin</option>
                     </select>
                 </div>
 

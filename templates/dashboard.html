@@ -58,7 +58,16 @@
             {% if data.agenda_hoje %}
             <table class="table"><thead><tr><th>Colaborador</th><th>Horário</th><th>Local</th><th>Status</th></tr></thead><tbody>
             {% for a in data.agenda_hoje %}
-            <tr><td>{{ a.colab_name }}</td><td>{{ a.horario_coleta }}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
+            <tr><td>{{ a.colab_name }}</td><td>{{ a.horario_coleta }}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td>
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        {% set cur_ex = a.exames|exames_json_list %}
+                        {% if 'toxicologico_urina' in cur_ex %} <span class="badge {% if a.st_urina=='realizado' %}badge-success{% elif a.st_urina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Urina: {{ a.st_urina.title() }}</span> {% endif %}
+                        {% if 'toxicologico_queratina' in cur_ex %} <span class="badge {% if a.st_queratina=='realizado' %}badge-success{% elif a.st_queratina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Quer: {{ a.st_queratina.title() }}</span> {% endif %}
+                        {% if 'alcoolemia' in cur_ex %} <span class="badge {% if a.st_alcoolemia=='realizado' %}badge-success{% elif a.st_alcoolemia=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Alc: {{ a.st_alcoolemia.title() }}</span> {% endif %}
+                    </div>
+                </td>
+            </tr>
             {% endfor %}</tbody></table>
             {% else %}<p class="empty-state">Nenhum agendamento para hoje.</p>{% endif %}
         </div>
@@ -70,7 +79,16 @@
             {% if data.agendamentos %}
             <table class="table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Data</th><th>Status</th></tr></thead><tbody>
             {% for a in data.agendamentos %}
-            <tr><td>{{ a.colab_name }}</td><td><span class="badge badge-info">{{ a.motivo|label_motivo_agendamento }}</span></td><td>{{ a.data_coleta }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
+            <tr><td>{{ a.colab_name }}</td><td><span class="badge badge-info">{{ a.motivo|label_motivo_agendamento }}</span></td><td>{{ a.data_coleta }}</td>
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        {% set cur_ex = a.exames|exames_json_list %}
+                        {% if 'toxicologico_urina' in cur_ex %} <span class="badge {% if a.st_urina=='realizado' %}badge-success{% elif a.st_urina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Urina: {{ a.st_urina.title() }}</span> {% endif %}
+                        {% if 'toxicologico_queratina' in cur_ex %} <span class="badge {% if a.st_queratina=='realizado' %}badge-success{% elif a.st_queratina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Quer: {{ a.st_queratina.title() }}</span> {% endif %}
+                        {% if 'alcoolemia' in cur_ex %} <span class="badge {% if a.st_alcoolemia=='realizado' %}badge-success{% elif a.st_alcoolemia=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Alc: {{ a.st_alcoolemia.title() }}</span> {% endif %}
+                    </div>
+                </td>
+            </tr>
             {% endfor %}</tbody></table>
             {% else %}<p class="empty-state">Nenhum agendamento registrado.</p>{% endif %}
         </div>
@@ -84,14 +102,24 @@
 </div>
 <div class="card mt-1"><div class="card-header"><h2><i class="fas fa-calendar-day"></i> Agenda do Dia</h2></div><div class="card-body">
     {% if data.agenda_hoje %}
-    <table class="table"><thead><tr><th>Horário</th><th>Colaborador</th><th>Exames</th><th>Local</th><th>Status</th></tr></thead><tbody>
+    <table class="table"><thead><tr><th>Horário</th><th>Colaborador</th><th>Exames</th><th>Local</th></tr></thead><tbody>
     {% for a in data.agenda_hoje %}
-    <tr><td>{{ a.horario_coleta }}</td><td>{{ a.colab_name }}</td><td>{% for ex in a.exames|exames_json_list %}<span class="badge badge-secondary">{{ ex|label_exame_agendamento }}</span>{% endfor %}</td><td>{{ a.local_coleta.replace('_',' ').title() }}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>
+    <tr><td>{{ a.horario_coleta }}</td><td>{{ a.colab_name }}</td>
+        <td>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                {% set cur_ex = a.exames|exames_json_list %}
+                {% if 'toxicologico_urina' in cur_ex %} <span class="badge {% if a.st_urina=='realizado' %}badge-success{% elif a.st_urina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Urina: {{ a.st_urina.title() }}</span> {% endif %}
+                {% if 'toxicologico_queratina' in cur_ex %} <span class="badge {% if a.st_queratina=='realizado' %}badge-success{% elif a.st_queratina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Quer: {{ a.st_queratina.title() }}</span> {% endif %}
+                {% if 'alcoolemia' in cur_ex %} <span class="badge {% if a.st_alcoolemia=='realizado' %}badge-success{% elif a.st_alcoolemia=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Alc: {{ a.st_alcoolemia.title() }}</span> {% endif %}
+            </div>
+        </td>
+        <td>{{ a.local_coleta.replace('_',' ').title() }}</td>
+    </tr>
     {% endfor %}</tbody></table>
     {% else %}<p class="empty-state"><i class="fas fa-calendar-check"></i> Nenhum atendimento agendado para hoje.</p>{% endif %}
 </div></div>
 
-{% elif user.role in ['adm_biocognitiva', 'administrador'] %}
+{% elif user.role in ['adm_biocognitiva', 'administrador', 'super_admin'] %}
 <div class="stats-grid">
     <div class="stat-card stat-blue"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-info"><h3>{{ data.total_colabs if data.total_colabs else 0 }}</h3><p>Colaboradores</p></div></div>
     <div class="stat-card stat-green"><div class="stat-icon"><i class="fas fa-calendar"></i></div><div class="stat-info"><h3>{{ data.total_agend if data.total_agend else 0 }}</h3><p>Agendamentos</p></div></div>
@@ -99,8 +127,17 @@
 </div>
 <div class="card mt-1"><div class="card-header"><h2><i class="fas fa-calendar-alt"></i> Agendamentos Recentes</h2></div><div class="card-body">
     {% if data.agendamentos %}
-    <table class="table"><thead><tr><th>Colaborador</th><th>Data</th><th>Exames</th><th>Status</th></tr></thead><tbody>
-    {% for a in data.agendamentos %}<tr><td>{{ a.colab_name }}</td><td>{{ a.data_coleta }}</td><td>{% for ex in a.exames|exames_json_list %}<span class="badge badge-secondary">{{ ex|label_exame_agendamento }}</span>{% endfor %}</td><td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td></tr>{% endfor %}
+    <table class="table"><thead><tr><th>Colaborador</th><th>Data</th><th>Exames</th></tr></thead><tbody>
+    {% for a in data.agendamentos %}<tr><td>{{ a.colab_name }}</td><td>{{ a.data_coleta }}</td>
+        <td>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                {% set cur_ex = a.exames|exames_json_list %}
+                {% if 'toxicologico_urina' in cur_ex %} <span class="badge {% if a.st_urina=='realizado' %}badge-success{% elif a.st_urina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Urina: {{ a.st_urina.title() }}</span> {% endif %}
+                {% if 'toxicologico_queratina' in cur_ex %} <span class="badge {% if a.st_queratina=='realizado' %}badge-success{% elif a.st_queratina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Quer: {{ a.st_queratina.title() }}</span> {% endif %}
+                {% if 'alcoolemia' in cur_ex %} <span class="badge {% if a.st_alcoolemia=='realizado' %}badge-success{% elif a.st_alcoolemia=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Alc: {{ a.st_alcoolemia.title() }}</span> {% endif %}
+            </div>
+        </td>
+    </tr>{% endfor %}
     </tbody></table>
     {% else %}<p class="empty-state">Nenhum agendamento registrado.</p>{% endif %}
 </div></div>

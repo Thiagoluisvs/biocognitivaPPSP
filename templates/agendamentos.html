@@ -16,10 +16,17 @@
 <p class="text-muted" style="margin-bottom: 24px;">PPSP: escolha o motivo e <strong>no mínimo dois</strong> exames dentre toxicológico urina, toxicológico queratina e alcolemia.</p>
 
 <div class="grid-2">
-{% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
+{% if user.role in ('supervisor','adm_biocognitiva','administrador','super_admin') %}
 <div class="card"><div class="card-header"><h2><i class="fas fa-plus"></i> Novo agendamento</h2></div><div class="card-body">
 <form method="POST" action="{{ url_for('agendamento_novo') }}">
-    <div class="form-group"><label>Colaborador *</label><select name="colaborador_id" class="form-select" required>{% for c in colaboradores %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="form-group">
+        <label>Colaborador(es) * <small>(Segure Ctrl/Cmd para selecionar vários)</small></label>
+        <select name="colaborador_id" class="form-select" multiple size="5" style="height: auto; min-height: 120px;" required>
+            {% for c in colaboradores %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
     <div class="form-group"><label>Motivo *</label><select name="motivo" class="form-select" required>
         {% for key in ['exame_admissional','exame_aleatorio','exame_pos_acidente','exame_retorno_servico','exame_acompanhamento'] %}
         <option value="{{ key }}">{{ motivos_agendamento[key] }}</option>
@@ -31,9 +38,15 @@
     </div>
     <div class="form-group"><label>Local *</label><select name="local_coleta" class="form-select"><option value="biocognitiva">Biocognitiva</option><option value="in_company">In company</option></select></div>
     <div class="form-group"><label>Exames * <small>(mínimo 2)</small></label>
-        <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.5rem;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-top:.5rem; padding:12px; background:var(--bg-secondary); border-radius:8px;">
             {% for val, lab in tipos_exame_agendamento %}
-            <label style="cursor:pointer;display:flex;align-items:center;gap:.35rem;"><input type="checkbox" name="exames" value="{{ val }}"> {{ lab }}</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <label class="custom-checkbox" style="flex-shrink:0;">
+                    <input type="checkbox" name="exames" value="{{ val }}">
+                    <span class="checkmark"></span>
+                </label>
+                <span style="font-size:0.9rem; font-weight:500; color:var(--text-primary);">{{ lab }}</span>
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -58,8 +71,7 @@
                     <th>Motivo</th>
                     <th>Data/Hora</th>
                     <th>Local</th>
-                    <th>Exames</th>
-                    <th>Status</th>
+                    <th>Exames e Status</th>
                     <th class="actions-cell">Ações</th>
                 </tr>
             </thead>
@@ -82,13 +94,15 @@
                     </td>
                     <td><span class="tag">{{ a.local_coleta.replace('_',' ').title() }}</span></td>
                     <td>
-                        <div style="display:flex; flex-direction:column; gap:4px;">
-                            {% for ex in a.exames|exames_json_list %}
-                            <span class="badge badge-secondary" style="font-size:0.65rem;">{{ ex|label_exame_agendamento }}</span>
-                            {% endfor %}
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            {% set current_exames = a.exames|exames_json_list %}
+                            {% set cur_ex = a.exames|exames_json_list %}
+                            {% if 'toxicologico_urina' in cur_ex %} <span class="badge {% if a.st_urina=='realizado' %}badge-success{% elif a.st_urina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Urina: {{ a.st_urina.title() }}</span> {% endif %}
+                            {% if 'toxicologico_queratina' in cur_ex %} <span class="badge {% if a.st_queratina=='realizado' %}badge-success{% elif a.st_queratina=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Quer: {{ a.st_queratina.title() }}</span> {% endif %}
+                            {% if 'alcoolemia' in cur_ex %} <span class="badge {% if a.st_alcoolemia=='realizado' %}badge-success{% elif a.st_alcoolemia=='falta' %}badge-danger{% else %}badge-warning{% endif %}" style="font-size:0.6rem;">Alc: {{ a.st_alcoolemia.title() }}</span> {% endif %}
                         </div>
                     </td>
-                    <td><span class="badge badge-{{ a.status }}">{{ a.status.title() }}</span></td>
+
                     <td class="actions-cell">
                         <div class="actions-group">
                             <a href="{{ url_for('agendamento_editar', id=a.id) }}" class="btn-icon edit" title="Editar"><i class="fas fa-edit"></i></a>

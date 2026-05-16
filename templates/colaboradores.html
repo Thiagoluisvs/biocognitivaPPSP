@@ -11,7 +11,7 @@
     </div>
     <div class="header-actions">
         <a href="{{ url_for('export_csv', type='colaboradores') }}" class="btn btn-outline btn-sm"><i class="fas fa-file-export"></i> Exportar CSV</a>
-        {% if user.role in ('supervisor','adm_biocognitiva','administrador') %}
+        {% if user.role in ('supervisor','adm_biocognitiva','administrador','super_admin') %}
         <a href="{{ url_for('colaborador_novo') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Colaborador</a>
         {% endif %}
     </div>

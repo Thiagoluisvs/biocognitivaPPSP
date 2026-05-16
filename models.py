@@ -22,10 +22,11 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'colaborador' CHECK(role IN ('supervisor','colaborador','tecnico','adm_biocognitiva','administrador')),
+        role TEXT NOT NULL DEFAULT 'colaborador' CHECK(role IN ('supervisor','colaborador','tecnico','adm_biocognitiva','administrador','super_admin')),
         cpf TEXT DEFAULT '', phone TEXT DEFAULT '', address TEXT DEFAULT '',
         funcao TEXT DEFAULT '', data_admissao TEXT DEFAULT '',
         empresa TEXT DEFAULT '', active INTEGER DEFAULT 1,
+        last_login TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
 
@@ -59,7 +60,9 @@ def init_db():
         data_coleta DATE NOT NULL, horario_coleta TEXT NOT NULL,
         local_coleta TEXT NOT NULL CHECK(local_coleta IN ('biocognitiva','in_company')),
         exames TEXT NOT NULL DEFAULT '[]',
-        status TEXT DEFAULT 'agendado' CHECK(status IN ('agendado','realizado','falta','cancelado')),
+        st_urina TEXT DEFAULT 'agendado',
+        st_queratina TEXT DEFAULT 'agendado',
+        st_alcoolemia TEXT DEFAULT 'agendado',
         observacao TEXT DEFAULT '',
         agendado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
@@ -85,11 +88,14 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         colaborador_id INTEGER NOT NULL, agendamento_id INTEGER,
         data_coleta TEXT DEFAULT '',
-        resultado TEXT DEFAULT 'pendente' CHECK(resultado IN ('pendente','negativo','positivo','inconclusivo')),
+        res_alcoolemia TEXT DEFAULT 'pendente',
+        res_urina TEXT DEFAULT 'pendente',
+        res_queratina TEXT DEFAULT 'pendente',
         observacao TEXT DEFAULT '',
         foto_doador TEXT DEFAULT '', foto_bafometro TEXT DEFAULT '',
         foto_termo_consentimento TEXT DEFAULT '', foto_documento TEXT DEFAULT '',
         arquivo_resultado TEXT DEFAULT '',
+        arquivo_urina TEXT DEFAULT '', arquivo_queratina TEXT DEFAULT '',
         lancado_por INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id),
         FOREIGN KEY (agendamento_id) REFERENCES agendamentos(id),
@@ -263,6 +269,10 @@ def init_db():
         ('max_tentativas', '2', 'Máx. tentativas na avaliação'),
         ('platform_name', 'BiocognitivaPPSP', 'Nome da plataforma'),
         ('num_questoes_avaliacao', '10', 'Número de questões por avaliação'),
+        ('backup_auto_enabled', '0', 'Ativar backup automático (0=Não, 1=Sim)'),
+        ('backup_frequency', 'daily', 'Frequência do backup (6h, 12h, daily, weekly, monthly)'),
+        ('backup_retention_days', '30', 'Dias para manter os backups'),
+        ('backup_last_run', '', 'Última execução do backup automático'),
     ]
     for k, v, d in defaults:
         c.execute('INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)', (k, v, d))
@@ -431,6 +441,15 @@ def migrate_schema():
         except sqlite3.OperationalError:
             conn.rollback()
     
+    # Add last_login to users
+    user_cols = _table_columns(c, 'users')
+    if user_cols and 'last_login' not in user_cols:
+        try:
+            c.execute('ALTER TABLE users ADD COLUMN last_login TIMESTAMP')
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+    
     conn.commit()
     conn.close()
 
@@ -468,15 +487,15 @@ def seed_demo_data():
     # Demo appointments (mínimo 2 exames)
     today = datetime.now().strftime('%Y-%m-%d')
     agends = [
-        (1, 'exame_acompanhamento', today, '08:00', 'biocognitiva', json.dumps(['toxicologico_urina', 'toxicologico_queratina']), 'agendado', 2),
-        (2, 'exame_admissional', today, '09:00', 'biocognitiva', json.dumps(['alcoolemia', 'toxicologico_urina']), 'agendado', 2),
-        (3, 'exame_aleatorio', today, '10:00', 'in_company', json.dumps(['toxicologico_queratina', 'alcoolemia']), 'realizado', 2),
+        (1, 'exame_acompanhamento', today, '08:00', 'biocognitiva', json.dumps(['toxicologico_urina', 'toxicologico_queratina']), 'agendado', 'agendado', 'agendado', 2),
+        (2, 'exame_admissional', today, '09:00', 'biocognitiva', json.dumps(['alcoolemia', 'toxicologico_urina']), 'agendado', 'agendado', 'agendado', 2),
+        (3, 'exame_aleatorio', today, '10:00', 'in_company', json.dumps(['toxicologico_queratina', 'alcoolemia']), 'realizado', 'realizado', 'realizado', 2),
     ]
-    for cid, mot, dt, hr, loc, exj, st, by in agends:
+    for cid, mot, dt, hr, loc, exj, st_u, st_q, st_a, by in agends:
         c.execute(
-            '''INSERT INTO agendamentos (colaborador_id, motivo, data_coleta, horario_coleta, local_coleta, exames, status, agendado_por)
-            VALUES (?,?,?,?,?,?,?,?)''',
-            (cid, mot, dt, hr, loc, exj, st, by),
+            '''INSERT INTO agendamentos (colaborador_id, motivo, data_coleta, horario_coleta, local_coleta, exames, st_urina, st_queratina, st_alcoolemia, agendado_por)
+            VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            (cid, mot, dt, hr, loc, exj, st_u, st_q, st_a, by),
         )
 
     # Demo video lessons

@@ -14,6 +14,7 @@
         <option value="outro" {% if doc.tipo=='outro' %}selected{% endif %}>Outro</option>
     </select></div>
     <div class="form-group"><label>Título *</label><input type="text" name="titulo" class="form-input" value="{{ doc.titulo }}" required></div>
+    <div class="form-group"><label>Empresa Devedora</label><input type="text" name="empresa_devedora" class="form-input" value="{{ doc.empresa_devedora or '' }}" placeholder="Nome da empresa"></div>
     <div class="form-group"><label>Descrição</label><input type="text" name="descricao" class="form-input" value="{{ doc.descricao or '' }}"></div>
     <div class="form-group"><label>Substituir arquivo</label><input type="file" name="file" class="form-input"></div>
     <p class="text-muted">Arquivo atual: <a href="{{ url_for('serve_document', filename=doc.filename) }}" target="_blank" rel="noopener">{{ doc.original_filename }}</a></p>
